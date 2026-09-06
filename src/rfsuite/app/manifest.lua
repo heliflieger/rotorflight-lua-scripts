@@ -20,7 +20,10 @@ local manifest = {
       pages = {
         { id = "flight_tuning", title = "@i18n(app.modules.flight_tuning.name)@", menuId = "flight_tuning_menu", icon = "@pages/flight_tuning/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
         { id = "setup", title = "@i18n(app.modules.setup.name)@", menuId = "setup_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
-        { id = "wizards", title = "@i18n(app.modules.wizards.name)@", menuId = "wizards_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+        -- The setup assistant is a preview feature and Settings > General > Preview is what shows it.
+        -- `visibleWhen` rather than `hideWhenDisabled`, because the tile still has to grey out on
+        -- `enabledWhen` once it is shown and no flight controller has answered.
+        { id = "wizards", title = "@i18n(app.modules.wizards.name)@", menuId = "wizards_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", visibleWhen = "previewSetupWizard", lockedWhileArmed = true }
       }
     },
     {

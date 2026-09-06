@@ -41,6 +41,8 @@ local function defaultPreferences()
       save_confirm                 = true,
       save_armed_warning           = true,
       reload_confirm               = true,
+      -- preview features
+      preview_setup_wizard         = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,

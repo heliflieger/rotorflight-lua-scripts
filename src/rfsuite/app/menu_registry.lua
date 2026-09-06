@@ -167,6 +167,34 @@ function MenuRegistry.new(manifest, i18n, options)
     return entry.lockedWhileArmed == true and self.conditions.modelArmed == true
   end
 
+  -- Whether the entry is on the menu at all, which is a different question from whether it can
+  -- be entered. `hideWhenDisabled` cannot answer it: that flag hides an entry for ANY reason it
+  -- is disabled, so an entry that must disappear on one condition and merely grey out on another
+  -- -- no flight controller has answered, the craft is armed -- has no way to say so.
+  -- `visibleWhen` names the single condition that decides whether the entry exists, and an entry
+  -- it hides is not merely undrawn: navigation refuses it and the cursor skips it, so an id that
+  -- cannot be seen cannot be opened either.
+  local function isEntryVisible(entry)
+    if type(entry) ~= "table" then
+      return false
+    end
+
+    local conditionKey = entry.visibleWhen
+    if conditionKey == nil then
+      return true
+    end
+
+    if type(conditionKey) == "string" then
+      return self.conditions[conditionKey] == true
+    end
+
+    if type(conditionKey) == "function" then
+      return conditionKey(self.conditions, entry) == true
+    end
+
+    return true
+  end
+
   local function isEntryEnabled(entry)
     if type(entry) ~= "table" then
       return false
@@ -301,18 +329,21 @@ function MenuRegistry.new(manifest, i18n, options)
 
   local function syncCurrentEntry()
     local entries = getCurrentEntries()
-    if #entries == 0 then
-      self.currentEntryId = nil
-      return
-    end
+    local firstVisible = nil
 
     for i = 1, #entries do
-      if entries[i].id == self.currentEntryId then
-        return
+      local entry = entries[i]
+      if isEntryVisible(entry) then
+        if entry.id == self.currentEntryId then
+          return
+        end
+        if firstVisible == nil then
+          firstVisible = entry.id
+        end
       end
     end
 
-    self.currentEntryId = entries[1].id
+    self.currentEntryId = firstVisible
   end
 
   local function pushBreadcrumb(kind, id, title)
@@ -372,7 +403,7 @@ function MenuRegistry.new(manifest, i18n, options)
       for j = 1, #entries do
         local p = entries[j]
         local enabled = isEntryEnabled(p)
-        if not (enabled == false and p.hideWhenDisabled == true) then
+        if isEntryVisible(p) and not (enabled == false and p.hideWhenDisabled == true) then
           cards[#cards + 1] = {
           id = p.id,
           sectionId = section.id,
@@ -413,7 +444,7 @@ function MenuRegistry.new(manifest, i18n, options)
     for i = 1, #entries do
       local entry = entries[i]
       if entry.id == entryId then
-        if not isEntryEnabled(entry) then
+        if not isEntryVisible(entry) or not isEntryEnabled(entry) then
           return false
         end
 
@@ -442,7 +473,7 @@ function MenuRegistry.new(manifest, i18n, options)
     for i = 1, #entries do
       local entry = entries[i]
       if entry.id == id then
-        if not isEntryEnabled(entry) then
+        if not isEntryVisible(entry) or not isEntryEnabled(entry) then
           return false
         end
 
@@ -541,7 +572,7 @@ function MenuRegistry.new(manifest, i18n, options)
     for i = 1, #entries do
       local p = entries[i]
       local enabled = isEntryEnabled(p)
-      if not (enabled == false and p.hideWhenDisabled == true) then
+      if isEntryVisible(p) and not (enabled == false and p.hideWhenDisabled == true) then
       local row = p.row or math.floor((i - 1) / 3) + 1
       local col = p.col or ((i - 1) % 3) + 1
       cards[#cards + 1] = {

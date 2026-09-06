@@ -25,6 +25,7 @@ local CONFIG_SCHEMA = {
   { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
+  { key = "preview_setup_wizard",         type = "bool",   default = false  },
   { key = "developer_tools",              type = "bool",   default = false  },
 }
 
@@ -44,6 +45,7 @@ local ui = {
   dirty = false,
   sections = {
     safety      = true,
+    preview     = false,
     development = false,
   },
   config = buildDefaultConfig()
@@ -54,6 +56,7 @@ ui.runtime = nil
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
 local t = nil
+local pageI18n = nil
 
 local function ensureDeps()
   if not Common then
@@ -144,6 +147,96 @@ local function buildSafety(cursorY, children, x, w, i18n)
   return cursorY
 end
 
+-- ─── Preview features ────────────────────────────────────────────────────────
+-- A preview feature is in the tree but not finished. It stays hidden until it is switched on
+-- here, one switch per feature and no master switch, so that what is unfinished is only seen by
+-- somebody who has said they want to see it. Turning one on asks once; turning it off does not.
+--
+-- To put a feature behind this: one entry below, one key in CONFIG_SCHEMA and in the preference
+-- defaults, the matching condition published in onSave, and `visibleWhen` on its menu entry.
+
+local PREVIEW_ITEMS = {
+  {
+    key             = "preview_setup_wizard",
+    labelKey        = "preview_setup_wizard",
+    labelFallback   = "Setup Assistant",
+    confirmKey      = "preview_confirm_setup_wizard",
+    confirmFallback = "The setup assistant is not finished. Its screens and their order can still change, and it can write to "
+      .. "the flight controller. Check what it has written before you fly. Show it anyway?"
+  },
+}
+
+local ConfirmDialog = nil
+local confirmDialogTried = false
+
+local function getConfirmDialog()
+  if confirmDialogTried then return ConfirmDialog end
+  confirmDialogTried = true
+  local ok, mod = pcall(loadModule, "ui/confirm_dialog.lua")
+  if ok and type(mod) == "table" and type(mod.show) == "function" then
+    ConfirmDialog = mod
+  end
+  return ConfirmDialog
+end
+
+local previewSetters = {}
+
+-- The switch draws itself from the getter, so a refused acknowledgement needs nothing written
+-- back: the value never moved, and a repaint puts the switch where the value still is.
+--
+-- The setter is cached for the module's lifetime while ui.runtime is rebuilt on every visit, so
+-- it resolves the runtime when it runs rather than closing over the one that existed when it was
+-- created -- otherwise a page that has been closed and reopened would mark an abandoned runtime
+-- dirty and ask a dead rebuild hook for the repaint.
+local function getPreviewSetter(item)
+  local setter = previewSetters[item.key]
+  if setter then return setter end
+
+  setter = function(nextVal)
+    local apply = ui.runtime.getBoolSetter(item.key)
+    if nextVal ~= true then
+      apply(false)
+      return
+    end
+    if ui.config[item.key] == true then
+      return
+    end
+
+    local dialog = getConfirmDialog()
+    if dialog then
+      local ok, shown = pcall(dialog.show, {
+        title = t(pageI18n, item.labelKey, item.labelFallback),
+        message = t(pageI18n, item.confirmKey, item.confirmFallback),
+        onConfirm = function() apply(true) end,
+        onCancel = function()
+          local rebuild = ui.runtime and ui.runtime.requestRebuild
+          if rebuild then rebuild() end
+        end,
+        onFallback = function() apply(true) end
+      })
+      if ok and shown == true then return end
+    end
+
+    -- No confirm UI could be put up. The switch then does what it was asked to do: refusing it
+    -- because the acknowledgement cannot be shown would leave the feature unreachable.
+    apply(true)
+  end
+
+  previewSetters[item.key] = setter
+  return setter
+end
+
+local function buildPreview(cursorY, children, x, w, i18n)
+  for _, item in ipairs(PREVIEW_ITEMS) do
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+      t(i18n, item.labelKey, item.labelFallback),
+      ui.runtime.getBoolGetter(item.key),
+      getPreviewSetter(item)
+    )
+  end
+  return cursorY
+end
+
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Developer Tools"),
@@ -158,6 +251,7 @@ end
 
 local SECTIONS = {
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
+  { key = "preview",     titleKey = "section_preview",     titleFallback = "Preview",          build = buildPreview     },
   { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
 }
 
@@ -188,6 +282,7 @@ function M.onSave(ctx)
     ui.dirty = false
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
+      ctx.menu.setCondition("previewSetupWizard", ui.config.preview_setup_wizard == true)
     end
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
@@ -206,6 +301,7 @@ function M.build(ctx)
   local children       = ctx.children
   local x, w          = ctx.x, ctx.w
   local i18n           = ctx.i18n
+  pageI18n             = i18n
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   local cursorY        = ctx.y
 
@@ -231,6 +327,7 @@ function M.onClose()
   Controls = nil
   Common = nil
   t = nil
+  pageI18n = nil
 end
 
 return M

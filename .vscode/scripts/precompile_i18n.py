@@ -40,8 +40,25 @@ def process_file(file_path):
     if prefix:
         full_prefix = f"app.pages.{prefix}"
         
+        # The cross-page form -- Common.t with a page key of its own, with or without a
+        # fallback -- names the page whose block it borrows a key from. It is substituted
+        # BEFORE the generic pageText/t pattern below, because both can match the same
+        # call and only this one resolves the borrowed page key.
+        def sub_commont(m):
+            page_key = m.group(1)
+            key = m.group(2)
+            if m.group(4) is not None:
+                fallback = encode_fallback(m.group(4))
+                return f'"@i18n(app.pages.{page_key}.{key}|{fallback})@"'
+            return f'"@i18n(app.pages.{page_key}.{key})@"'
+        pattern_common = r'\bCommon\.t\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\3)?\s*\)'
+        new_content, count = re.subn(pattern_common, sub_commont, content)
+        if count > 0:
+            content = new_content
+            changed = True
+
         # Replace pageText(i18n, "key", "fallback") or pageText(ctx.i18n, "key", "fallback") or t(i18n, "key", "fallback") or t(ctx.i18n, "key")
-        pattern = r'\b(?:pageText|t)\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
+        pattern = r'(?<![\w.])(?:pageText|t)\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
         def sub_pagetext(m):
             key = m.group(1)
             if m.group(3) is not None:
@@ -90,20 +107,6 @@ def process_file(file_path):
             content = new_content
             changed = True
 
-        # Also support: Common.t(i18n, "pageKey", "key", "fallback") or Common.t(i18n, "pageKey", "key")
-        def sub_commont(m):
-            page_key = m.group(1)
-            key = m.group(2)
-            if m.group(4) is not None:
-                fallback = encode_fallback(m.group(4))
-                return f'"@i18n(app.pages.{page_key}.{key}|{fallback})@"'
-            return f'"@i18n(app.pages.{page_key}.{key})@"'
-        pattern_common = r'\bCommon\.t\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\3)?\s*\)'
-        new_content, count = re.subn(pattern_common, sub_commont, content)
-        if count > 0:
-            content = new_content
-            changed = True
-            
         # 3. If it's a help file with fallback = { ... }
         m_fallback = re.search(r'fallback\s*=\s*\{(.*?)\}', content, re.DOTALL)
         if m_fallback:

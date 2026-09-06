@@ -58,3 +58,22 @@ jobs:
 
       - name: Account instructions per pass
         run: lua5.3 bin/accounting/measure.lua --check
+
+  i18n-precompiler:
+    name: i18n precompiler
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prove the checks can go red
+        run: python .vscode/scripts/test_precompile_i18n.py --self-test
+
+      - name: Precompile one page and compare
+        run: python .vscode/scripts/test_precompile_i18n.py

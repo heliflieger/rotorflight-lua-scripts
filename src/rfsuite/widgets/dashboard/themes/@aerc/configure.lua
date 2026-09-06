@@ -11,6 +11,10 @@ end
 local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
 
+-- The settings page loads this file for the theme it is configuring and hands that theme
+-- to the factory below, so a copy of this theme under rfsuite.user/dashboard stores its
+-- values under its own key prefix instead of this one's. The literal is the fallback for
+-- a caller that passes no theme.
 local THEME_PATH = "system/@aerc"
 local THEME_DEFAULTS = {
     rpm_min = 0,
@@ -349,6 +353,12 @@ function M.build(ctx)
     return cursorY
 end
 
-return M
+return function(ctx)
+    local theme = ctx and ctx.theme
+    if type(theme) == "table" and type(theme.path) == "string" and theme.path ~= "" then
+        THEME_PATH = theme.path
+    end
+    return M
+end
 
 

@@ -146,12 +146,22 @@ replaced by underscores, so both `My Heli.wav` and `My_Heli.wav` are found.
 
 The dashboard can show a model image. It is resolved in this order:
 
-1. `/IMAGES/<model name>.png`, using the model name reported by the flight controller
-2. the image assigned to the model in the transmitter's own model settings
-3. the Rotorflight logo
+1. `/IMAGES/<model name>-<cells>S`, using the model name reported by the flight controller and
+   the cell count currently detected — a picture per battery size for the same airframe
+2. `/IMAGES/<model name>`
+3. the image assigned to the model in the transmitter's own model settings
+4. the Rotorflight logo
 
-Images are scaled to fit the widget box. Standard EdgeTX model image dimensions (for example
-192x114 or 160x128) give the best result.
+For the first two, any extension EdgeTX can read is accepted and tried in the order `.png`,
+`.bmp`, `.jpg`, `.jpeg`; upper and lower case make no difference. The cell-count variant is
+skipped while no cell count is known.
+
+The image is fitted to the widget box with its proportions kept, so it fills as much of the box
+as its shape allows. Standard EdgeTX model image dimensions (for example 192x114 or 160x128)
+give the best result.
+
+The caption under the image is the model name reported by the flight controller, or the
+transmitter's own model name while none has been reported.
 
 
 ## Safety

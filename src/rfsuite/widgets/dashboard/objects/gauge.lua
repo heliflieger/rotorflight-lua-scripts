@@ -74,35 +74,48 @@ end
 -- list per resolve): the comparison values with their unit conversion already applied and
 -- the fill color picked, in the theme's own order. The per-frame pick is then a walk over
 -- a list whose length is a build-time constant.
+--
+-- A threshold's `value` may also be a function, exactly like a box's `min` and `max`: a theme
+-- whose limits live on its configure page has nothing else to key them on. Such a list is
+-- resolved per call and never cached, because what it resolves to can change while the box
+-- table it belongs to stays the same one.
 local thresholdCache = setmetatable({}, { __mode = "k" })
 
-local function compiledThresholds(box, thresholds, isFahrenheit)
+local function compiledThresholds(box, thresholds, isFahrenheit, state, utils)
   local cached = box and thresholdCache[box] or nil
   if cached and cached.src == thresholds and cached.fahrenheit == isFahrenheit then
     return cached.list
   end
   local list = {}
+  local dynamic = false
   for i = 1, #thresholds do
     local threshold = thresholds[i]
-    if type(threshold) == "table" and type(threshold.value) == "number" then
-      list[#list + 1] = {
-        value = isFahrenheit and cToF(threshold.value) or threshold.value,
-        color = threshold.fillcolor or threshold.color
-      }
+    if type(threshold) == "table" then
+      local limit = threshold.value
+      if type(limit) == "function" then
+        dynamic = true
+        limit = utils and utils.resolveValue(limit, box, state) or nil
+      end
+      if type(limit) == "number" then
+        list[#list + 1] = {
+          value = isFahrenheit and cToF(limit) or limit,
+          color = threshold.fillcolor or threshold.color
+        }
+      end
     end
   end
-  if box then
+  if box and not dynamic then
     thresholdCache[box] = { src = thresholds, fahrenheit = isFahrenheit, list = list }
   end
   return list
 end
 
-local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box)
+local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, utils)
   if type(value) ~= "number" or type(thresholds) ~= "table" or #thresholds == 0 then
     return defaultColor
   end
 
-  local list = compiledThresholds(box, thresholds, isFahrenheit == true)
+  local list = compiledThresholds(box, thresholds, isFahrenheit == true, state, utils)
   for i = 1, #list do
     if value <= list[i].value then
       return list[i].color or defaultColor
@@ -112,7 +125,18 @@ local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenhe
   return defaultColor
 end
 
-local function getArcValueColor(value, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit)
+-- The grading further down is the battery rule: the value divided by the pack's estimated cell
+-- count and held against per-cell limits. It says something only where the value IS the pack
+-- voltage. A gauge on any other source -- a BEC rail, an RPM -- is not a battery, and dividing
+-- it by the cell count grades it against limits it has nothing to do with. Such a box keeps the
+-- plain fill; a theme that wants it graded states its own `thresholds`, or opts into the
+-- per-cell rule by carrying `alertcell` / `warncell`.
+local function isCellGraded(source, box)
+  if source == "voltage" then return true end
+  return box ~= nil and (box.alertcell ~= nil or box.warncell ~= nil)
+end
+
+local function getArcValueColor(value, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit, source)
   if type(value) ~= "number" then
     return ARC_BG_COLOR
   end
@@ -182,6 +206,10 @@ local function getArcValueColor(value, state, box, themeCommon, utils, isTemp, f
   -- Default: battery cell voltage handling (ascending thresholds, low = bad).
   if value <= 0 or curHasValue == false then
     return ARC_BG_COLOR
+  end
+
+  if not isCellGraded(source, box) then
+    return ARC_OK_COLOR
   end
 
   local cells = 1
@@ -295,7 +323,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils)
     end
     
     -- Background bar (vertical)
@@ -422,7 +450,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils)
     end
     
     -- Background bar
@@ -683,9 +711,9 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     local arcValueColor = box.fillcolor
     if not arcValueColor then
       if type(box.thresholds) == "table" and #box.thresholds > 0 and curHasValue then
-        arcValueColor = resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit, box)
+        arcValueColor = resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit, box, state, utils)
       else
-        arcValueColor = getArcValueColor(curVal, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit)
+        arcValueColor = getArcValueColor(curVal, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit, source)
       end
     end
     cachedArcColor = arcValueColor or ARC_OK_COLOR
@@ -775,7 +803,11 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
       end
       local valueColor = utils.resolveTextColor(box, state, WHITE)
       if unit == "%" and curHasValue then
+<<<<<<< HEAD
         valueColor = getArcValueColor(curVal, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit)
+=======
+        valueColor = getArcValueColor(curVal, state, box, themeCommon, utils, source)
+>>>>>>> 8cfe673 (fix(dashboard): grade an arc by the per-cell rule only where the value is the pack voltage)
       end
       cachedValColor = valueColor
       return cachedValColor

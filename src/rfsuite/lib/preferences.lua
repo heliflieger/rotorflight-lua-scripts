@@ -1,6 +1,55 @@
 local M = {}
 
-local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREF_PATH        = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+-- Reload request file monitored by the dashboard widget via fstat size.
+-- Uses a rotating byte counter (1..32 bytes) so changes are reliably detected
+-- where fstat is available even without an RTC or when the INI byte-size doesn't change,
+-- without ever consuming or deleting the file (which breaks multi-reader and drops armed events).
+local RELOAD_REQ_PATH  = "/SCRIPTS/TOOLS/rfsuite.user/reload.req"
+
+local cachedModelPreferences = nil
+
+local function getModelPreferences()
+  if cachedModelPreferences then
+    return cachedModelPreferences
+  end
+  if _G.rfsuite and _G.rfsuite.require then
+    cachedModelPreferences = _G.rfsuite.require("lib/model_preferences.lua")
+    return cachedModelPreferences
+  end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then
+      cachedModelPreferences = mod
+      return cachedModelPreferences
+    end
+  end
+  return nil
+end
+
+local function bumpReloadCounter(userRoot)
+  local MP = getModelPreferences()
+  if MP and type(MP.bumpReloadCounter) == "function" then
+    MP.bumpReloadCounter(userRoot)
+    return
+  end
+
+  local targetPath = userRoot and (userRoot .. "/reload.req") or RELOAD_REQ_PATH
+  local n = 1
+  if type(fstat) == "function" then
+    local ok, info = pcall(fstat, targetPath)
+    if ok and type(info) == "table" then
+      n = ((info.size or 0) % 32) + 1
+    end
+  end
+  local f = io.open(targetPath, "w")
+  if f then
+    io.write(f, string.rep("x", n))
+    io.close(f)
+  end
+end
 
 -- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
 -- below keeps going until the file ends.
@@ -86,7 +135,15 @@ local function defaultPreferences()
   }
 end
 
-function M.getPath()
+function M.getPath(safeId)
+  local mcuId = safeId
+  if not mcuId and type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+    mcuId = _G.rfsuite.session.mcu_id
+  end
+  local MP = getModelPreferences()
+  if MP and type(MP.preferencesPath) == "function" then
+    return MP.preferencesPath(mcuId)
+  end
   return PREF_PATH
 end
 
@@ -124,7 +181,8 @@ end
 
 function M.load()
   local prefs = defaultPreferences()
-  local content = loadFileAsString(PREF_PATH)
+  local path = M.getPath()
+  local content = loadFileAsString(path)
   if not content then
     return prefs, false
   end
@@ -169,8 +227,8 @@ local function makeDir(path)
   pcall(mkdir, path)
 end
 
-local function ensureUserDir()
-  local userRoot = string.match(PREF_PATH, "^(.*)/[^/]+$")
+local function ensureUserDir(targetPath)
+  local userRoot = string.match(targetPath or M.getPath(), "^(.*)/[^/]+$")
   if not userRoot then return end
   local toolsRoot = string.gsub(userRoot, "/rfsuite%.user$", "")
   if toolsRoot ~= "" and toolsRoot ~= userRoot then
@@ -180,9 +238,10 @@ local function ensureUserDir()
 end
 
 function M.save(prefs)
-  ensureUserDir()
+  local path = M.getPath()
+  ensureUserDir(path)
 
-  local f, err = io.open(PREF_PATH, "w")
+  local f, err = io.open(path, "w")
   if not f then return false, err end
 
   for section, values in pairs(prefs or {}) do
@@ -196,9 +255,11 @@ function M.save(prefs)
 
   io.close(f)
 
-  -- No signal is sent. Writing this file IS the event: the widget compares the file's
-  -- size and mtime and reloads when they move, so nothing has to be told and nothing can
-  -- be consumed by the wrong reader. The pilot's model is not touched.
+  -- Signal the dashboard widget that preferences have changed via rotating
+  -- sequence length in reload.req. Multi-reader safe, armed-safe, and independent
+  -- of RTC timestamp or INI file size equality.
+  local userRoot = string.match(path, "^(.*)/[^/]+$")
+  bumpReloadCounter(userRoot)
 
   return true
 end

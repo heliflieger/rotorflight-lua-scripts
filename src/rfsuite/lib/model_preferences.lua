@@ -5,6 +5,19 @@ local USER_ROOTS = {
   "SCRIPTS:/TOOLS/rfsuite.user"
 }
 
+-- Reload request file monitored by the dashboard widget via fstat size.
+-- Uses a rotating byte counter (1..32 bytes) so changes are reliably detected
+-- where fstat is available even without an RTC or when the INI byte-size doesn't change,
+-- without ever consuming or deleting the file (which breaks multi-reader and drops armed events).
+local RELOAD_REQ_FILE = "reload.req"
+
+M.USER_ROOTS = USER_ROOTS
+M.RELOAD_REQ_FILE = RELOAD_REQ_FILE
+
+local function bumpReloadCounter(userRoot)
+  M.bumpReloadCounter(userRoot)
+end
+
 -- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
 -- below keeps going until the file ends.
 local READ_CHUNK = 2048
@@ -194,7 +207,25 @@ local function buildPathForRoot(userRoot, safeId)
   return userRoot .. "/" .. safeId .. ".ini"
 end
 
+local function dirExists(path)
+  if fileExists(path .. "/preferences.ini") or fileExists(path .. "/" .. RELOAD_REQ_FILE) then
+    return true
+  end
+  if type(fstat) == "function" then
+    local ok, info = pcall(fstat, path)
+    if ok and type(info) == "table" then return true end
+  end
+  return false
+end
+
+local memoizedRoots = {}
+
 local function orderedRoots(safeId)
+  local cacheKey = safeId or "__default"
+  if memoizedRoots[cacheKey] then
+    return memoizedRoots[cacheKey]
+  end
+
   local prioritized = {}
   local used = {}
 
@@ -222,9 +253,17 @@ local function orderedRoots(safeId)
   end
 
   for i = 1, #USER_ROOTS do
+    local root = USER_ROOTS[i]
+    if dirExists(root) then
+      add(root)
+    end
+  end
+
+  for i = 1, #USER_ROOTS do
     add(USER_ROOTS[i])
   end
 
+  memoizedRoots[cacheKey] = prioritized
   return prioritized
 end
 
@@ -236,6 +275,63 @@ local function normalizeMcuId(mcuId)
   id = string.gsub(id, "[^%w_-]", "_")
   if id == "" then return nil end
   return id
+end
+
+local RELOAD_REQ_PATHS = {}
+for i = 1, #USER_ROOTS do
+  RELOAD_REQ_PATHS[i] = USER_ROOTS[i] .. "/" .. RELOAD_REQ_FILE
+end
+
+function M.reloadRequestPaths()
+  return RELOAD_REQ_PATHS
+end
+
+function M.getUserRoots()
+  local roots = {}
+  for i = 1, #USER_ROOTS do
+    roots[i] = USER_ROOTS[i]
+  end
+  return roots
+end
+
+function M.getUserRoot(safeId)
+  local safe = normalizeMcuId(safeId)
+  local roots = orderedRoots(safe)
+  return roots[1] or USER_ROOTS[1]
+end
+
+function M.preferencesPath(safeId)
+  return M.getUserRoot(safeId) .. "/preferences.ini"
+end
+
+function M.reloadRequestPath(userRootOrSafeId)
+  local root
+  if type(userRootOrSafeId) == "string" and userRootOrSafeId ~= "" then
+    if string.find(userRootOrSafeId, "/") then
+      root = userRootOrSafeId
+    else
+      root = M.getUserRoot(userRootOrSafeId)
+    end
+  else
+    root = M.getUserRoot()
+  end
+  return root .. "/" .. RELOAD_REQ_FILE
+end
+
+function M.bumpReloadCounter(userRoot)
+  local targetPath = M.reloadRequestPath(userRoot)
+  local n = 1
+  if type(fstat) == "function" then
+    local ok, info = pcall(fstat, targetPath)
+    if ok and type(info) == "table" then
+      n = ((info.size or 0) % 32) + 1
+    end
+  end
+  local f = io.open(targetPath, "w")
+  if f then
+    io.write(f, string.rep("x", n))
+    io.close(f)
+  end
 end
 
 local function ensureFileExists(path)
@@ -259,6 +355,7 @@ function M.clearCache()
   cachedMcuId = nil
   cachedPrefs = nil
   cachedPath = nil
+  memoizedRoots = {}
 end
 
 function M.buildPath(mcuId)
@@ -338,7 +435,10 @@ function M.saveByMcuId(mcuId, prefs)
         cachedMcuId = safeId
         cachedPrefs = deepCopyTable(data)
         cachedPath = path
-        -- No signal is sent. Writing this file IS the event -- see lib/preferences.lua.
+        -- Signal the dashboard widget that model preferences have changed via
+        -- rotating sequence length in reload.req. Multi-reader safe, armed-safe,
+        -- and independent of RTC timestamp or INI file size equality.
+        bumpReloadCounter(userRoot)
         return true
       end
       lastErr = saveErr or "io"
@@ -347,6 +447,7 @@ function M.saveByMcuId(mcuId, prefs)
     end
   end
 
+  memoizedRoots = {}
   return false, lastErr
 end
 

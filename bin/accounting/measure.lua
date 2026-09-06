@@ -191,7 +191,16 @@ end
 --
 -- Everything before that is the cold start, which loads several dozen modules and is
 -- reported as a row of its own rather than folded into the steady-state numbers.
-local SETTLE_TAIL = 20
+--
+-- The tail also has to outlast the one-time announcements a fresh connection makes.
+-- Those are spaced by their own cooldowns, so how many passes after the swap the last
+-- of them lands depends on which of them ran at all. With a tail of 20, silencing one
+-- moves a later one into the first measured pass, where it reads as +2892 instructions
+-- of steady-state cost that no pass on a radio pays: on an otherwise untouched tree,
+-- forcing the initial fuel announcement off takes pass.state from 11460 to 14352 at a
+-- tail of 20, and leaves it at 10706 once the tail is long enough to cover it. A tail
+-- of 31 is the first that clears it, so 40 keeps ten passes of margin.
+local SETTLE_TAIL = 40
 
 local function settle(widget, sensorIds, maxPasses)
   local coldWorst = 0

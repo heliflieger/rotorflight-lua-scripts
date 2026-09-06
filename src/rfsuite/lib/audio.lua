@@ -235,6 +235,68 @@ local function emitLog(opts, msg, level)
   end
 end
 
+local pilotConfigApi = nil
+local pilotConfigApiLoaded = false
+
+-- Loaded once and kept. Audio.process runs several times a second, so a loadScript per pass is
+-- the shape the event tasks were taken apart for; the flag it reads changes only on connect.
+local function getPilotConfigApi()
+  if pilotConfigApiLoaded then
+    return pilotConfigApi
+  end
+  pilotConfigApiLoaded = true
+
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/pilot_config.lua", "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then
+      pilotConfigApi = mod
+    end
+  end
+
+  return pilotConfigApi
+end
+
+-- WHO decides that the remaining capacity is announced, and it is not always the radio.
+--
+-- From MSP API 12.09 the flight controller carries a MODEL_TELL_CAPACITY bit in its pilot
+-- config (`src/main/pg/pilot.h`), where the enum is introduced as indicating "what features on
+-- the radio should be enabled for this model". Once the board reports the word, that bit is the
+-- answer in both directions, the way `model_name_sync` already reads MODEL_SET_NAME: the craft
+-- says whether it wants the announcement, so the same helicopter behaves the same way on any
+-- transmitter. The `model_params_sync` task reads the word on connect and parks it in the
+-- session.
+--
+-- A CLEAR bit therefore silences it, and it has to. Once `model_flags` is present,
+-- `app/pages/setup/model/page.lua` offers this bit as the only control for the feature -- there
+-- is no radio-side counterpart shown beside it -- so a bit that could only ever say yes would
+-- leave that switch unable to turn the callout off for a craft.
+--
+-- Below 12.09 there is no such field -- `model_flags` is nil rather than zero, which is why the
+-- API wrapper keeps those apart -- and the radio-side setting is then the only thing that can
+-- decide. It stays, as the fallback it now is.
+--
+-- The announcement itself is the fuel level spoken once per connection: that IS the capacity
+-- this model has left, and until now it was reachable only through the radio-side setting.
+local function initialFuelWanted(events)
+  local root = type(_G) == "table" and _G.rfsuite or nil
+  local session = type(root) == "table" and root.session or nil
+  local pilot = type(session) == "table" and session.pilotConfig or nil
+  local flags = type(pilot) == "table" and pilot.model_flags or nil
+
+  if flags ~= nil then
+    local Api = getPilotConfigApi()
+    if type(Api) == "table" and type(Api.flagSet) == "function" then
+      local wanted = Api.flagSet(flags, Api.FLAG_TELL_CAPACITY)
+      if wanted ~= nil then
+        return wanted
+      end
+    end
+  end
+
+  return prefEnabled(events, "initial_fuel", true)
+end
+
 local function getLocaleModule()
   if localeModule then
     return localeModule
@@ -1013,8 +1075,9 @@ function Audio.process(self, opts)
     audioState.fuelSeenPositive = false
   end
 
-  local initialFuelEnabled = prefEnabled(events, "initial_fuel", true)
-  if initialFuelEnabled and audioState.initialized and not audioState.initialFuelAnnounced then
+  -- Once the callout has fired it stays fired for the session, so the cheapest of the three
+  -- tests goes first: no later pass then walks into `session.pilotConfig` at all.
+  if not audioState.initialFuelAnnounced and audioState.initialized and initialFuelWanted(events) then
     local fuel = tonumber(self.state and self.state.fuel)
     -- Same reason as the battery capacity above: this announcement is meant once per
     -- connection, and a caller that rebuilds its audio state for its own reasons has not

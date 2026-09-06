@@ -346,9 +346,19 @@ function Queue:clear(clientId, opts)
 
   -- warn, not debug: a clear is never routine from the point of view of whatever was queued.
   -- Every one of those handlers is somebody being told their request will not be answered.
-  self.logf("warn", "queue cleared client=%s keepWrites=%s inflight=%s depth=%d->%d dropped=%d",
-    clientId == nil and "ALL" or tostring(clientId), tostring(keepWrites),
-    inFlight and tostring(inFlight) or "-", depthBefore, qcount(self.queue), #handlers)
+  --
+  -- Only when there was something to tell. tasks/msp/runtime.lua clears the queue on EVERY
+  -- tick while the model is armed, as the gate that keeps configuration traffic off the link
+  -- in flight, and that queue is empty on all but the first of those ticks. A line for each
+  -- of them is formatted at every debug level -- warn ranks above info, so lib/log.lua builds
+  -- the string and files it in the ring even at "off" -- and it lands in the widget's
+  -- foreground pass at the logic-tick rate for the whole flight. An empty clear abandons
+  -- nobody, so it has nothing to say.
+  if depthBefore > 0 or inFlight ~= nil then
+    self.logf("warn", "queue cleared client=%s keepWrites=%s inflight=%s depth=%d->%d dropped=%d",
+      clientId == nil and "ALL" or tostring(clientId), tostring(keepWrites),
+      inFlight and tostring(inFlight) or "-", depthBefore, qcount(self.queue), #handlers)
+  end
 
   for i = 1, #handlers do
     pcall(handlers[i].fn, handlers[i].msg, "cleared")

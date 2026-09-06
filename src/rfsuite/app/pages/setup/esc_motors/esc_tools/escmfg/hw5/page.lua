@@ -557,7 +557,8 @@ function M.build(ctx)
       { value = 1, label = "ESC 2" }
     }
     local escTargetVal = ui.escTarget or 0
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Target", escOptions, escTargetVal, function(val)
+    local targetLabel = pageText(i18n, "esc_target", "ESC Target")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
       local targetVal = tonumber(val) or 0
       if ui.escTarget ~= targetVal then
         ui.escTarget = targetVal
@@ -575,7 +576,8 @@ function M.build(ctx)
     { value = 1, label = "Basic" },
     { value = 2, label = "Advanced" }
   }
-  rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
+  local sectionLabel = pageText(i18n, "esc_section", "Section")
+  rowH = Controls.appendComboSelect(children, x, cursorY, w, sectionLabel, sectionOptions, ui.currentSection, function(val)
     ui.currentSection = val
     -- The section is the whole of the session signature, and `M.wakeup` compares that signature
     -- on the next tick. Recording it here means the rebuild requested below is the only one:
@@ -600,7 +602,8 @@ function M.build(ctx)
         { value = 2, label = "Heli (Elf Gov)" },
         { value = 3, label = "Heli (Store Gov)" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Flight Mode", fmOpts, ui.config.flight_mode, function(val)
+      local flightModeLabel = pageText(i18n, "esc_flight_mode", "Flight Mode")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, flightModeLabel, fmOpts, ui.config.flight_mode, function(val)
         ui.config.flight_mode = val
         markDirty()
       end)
@@ -612,7 +615,8 @@ function M.build(ctx)
         { value = 0, label = "CW" },
         { value = 1, label = "CCW" }
       })
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Rotation", rotOpts, ui.config.rotation, function(val)
+      local rotationLabel = pageText(i18n, "esc_rotation", "Rotation")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, rotationLabel, rotOpts, ui.config.rotation, function(val)
         ui.config.rotation = val
         markDirty()
       end)
@@ -621,7 +625,8 @@ function M.build(ctx)
 
     if isFieldAllowed("bec_voltage") then
       local becOpts = getFieldOptions("bec_voltage")
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "BEC Voltage", becOpts, ui.config.bec_voltage, function(val)
+      local becVoltageLabel = pageText(i18n, "esc_bec_voltage", "BEC Voltage")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, becVoltageLabel, becOpts, ui.config.bec_voltage, function(val)
         ui.config.bec_voltage = val
         markDirty()
       end)
@@ -630,7 +635,8 @@ function M.build(ctx)
 
     if isFieldAllowed("lipo_cell_count") then
       local lipoOpts = getFieldOptions("lipo_cell_count")
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Lipo Cells", lipoOpts, ui.config.lipo_cell_count, function(val)
+      local lipoCellsLabel = pageText(i18n, "esc_lipo_cells", "Lipo Cells")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, lipoCellsLabel, lipoOpts, ui.config.lipo_cell_count, function(val)
         ui.config.lipo_cell_count = val
         markDirty()
       end)
@@ -642,7 +648,7 @@ function M.build(ctx)
         { value = 0, label = "Soft Cutoff" },
         { value = 1, label = "Hard Cutoff" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Type", cutoffTypeOpts, ui.config.cutoff_type or ui.config.volt_cutoff_type or 0, function(val)
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "esc_cutoff_type", "Cutoff Type"), cutoffTypeOpts, ui.config.cutoff_type or ui.config.volt_cutoff_type or 0, function(val)
         ui.config.cutoff_type = val
         ui.config.volt_cutoff_type = val
         markDirty()
@@ -652,7 +658,8 @@ function M.build(ctx)
 
     if isFieldAllowed("cutoff_voltage") then
       local cutoffVoltsOpts = getFieldOptions("cutoff_voltage")
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Voltage", cutoffVoltsOpts, ui.config.cutoff_voltage, function(val)
+      local cutoffVoltage = pageText(i18n, "esc_cutoff_voltage", "Cutoff Voltage")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, cutoffVoltage, cutoffVoltsOpts, ui.config.cutoff_voltage, function(val)
         ui.config.cutoff_voltage = val
         markDirty()
       end)
@@ -662,7 +669,7 @@ function M.build(ctx)
   elseif ui.currentSection == 2 then
     -- Advanced Settings
     if isFieldAllowed("gov_p_gain") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor P Gain", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_p_gain", "Governor P Gain"), {
         min = 0, max = 9, step = 1,
         get = function() return ui.config.gov_p_gain end,
         set = function(val)
@@ -674,7 +681,7 @@ function M.build(ctx)
     end
 
     if isFieldAllowed("gov_i_gain") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor I Gain", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_i_gain", "Governor I Gain"), {
         min = 0, max = 9, step = 1,
         get = function() return ui.config.gov_i_gain end,
         set = function(val)
@@ -686,7 +693,7 @@ function M.build(ctx)
     end
 
     if isFieldAllowed("startup_time") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Startup Time", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_startup_time", "Startup Time"), {
         min = 4, max = 25, step = 1, suffix = "s",
         get = function() return ui.config.startup_time end,
         set = function(val)
@@ -698,7 +705,7 @@ function M.build(ctx)
     end
 
     if isFieldAllowed("auto_restart") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Auto Restart Time", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_auto_restart_time", "Auto Restart Time"), {
         min = 0, max = 90, step = 1, suffix = "s",
         get = function() return ui.config.auto_restart end,
         set = function(val)
@@ -717,7 +724,8 @@ function M.build(ctx)
         { value = 3, label = "2.5s" },
         { value = 4, label = "3s" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Restart Time", restartOpts, ui.config.restart_time, function(val)
+      local restartTimeLabel = pageText(i18n, "esc_restart_time", "Restart Time")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, restartTimeLabel, restartOpts, ui.config.restart_time, function(val)
         ui.config.restart_time = val
         markDirty()
       end)
@@ -725,7 +733,7 @@ function M.build(ctx)
     end
 
     if isFieldAllowed("timing") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Motor Timing", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_motor_timing", "Motor Timing"), {
         min = 0, max = 30, step = 1, suffix = "deg",
         get = function() return ui.config.timing end,
         set = function(val)
@@ -746,7 +754,8 @@ function M.build(ctx)
         { value = 5, label = "6" },
         { value = 6, label = "7" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Power", powerOpts, ui.config.startup_power, function(val)
+      local startupPowerLabel = pageText(i18n, "esc_startup_power", "Startup Power")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, startupPowerLabel, powerOpts, ui.config.startup_power, function(val)
         ui.config.startup_power = val
         markDirty()
       end)
@@ -758,7 +767,8 @@ function M.build(ctx)
         { value = 0, label = "Enabled" },
         { value = 1, label = "Disabled" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Active Freewheel", afOpts, ui.config.active_freewheel, function(val)
+      local activeFreewheelLabel = pageText(i18n, "esc_active_freewheel", "Active Freewheel")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, activeFreewheelLabel, afOpts, ui.config.active_freewheel, function(val)
         ui.config.active_freewheel = val
         markDirty()
       end)
@@ -778,7 +788,8 @@ function M.build(ctx)
         { value = 8, label = "9" },
         { value = 9, label = "10" }
       })
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Response Time", respOpts, ui.config.response_time, function(val)
+      local responseTimeLabel = pageText(i18n, "esc_response_time", "Response Time")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, responseTimeLabel, respOpts, ui.config.response_time, function(val)
         ui.config.response_time = val
         markDirty()
       end)
@@ -792,7 +803,8 @@ function M.build(ctx)
         { value = 2, label = "Proportional" },
         { value = 3, label = "Reverse" }
       })
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Brake Type", brakeOpts, ui.config.brake_type, function(val)
+      local brakeTypeLabel = pageText(i18n, "esc_brake_type", "Brake Type")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, brakeTypeLabel, brakeOpts, ui.config.brake_type, function(val)
         ui.config.brake_type = val
         markDirty()
       end)
@@ -800,7 +812,7 @@ function M.build(ctx)
     end
 
     if isFieldAllowed("brake_force") then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Brake Force", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_brake_force", "Brake Force"), {
         min = 0, max = 100, step = 1, suffix = "%",
         get = function() return ui.config.brake_force end,
         set = function(val)

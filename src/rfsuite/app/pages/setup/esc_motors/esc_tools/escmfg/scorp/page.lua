@@ -520,7 +520,8 @@ function M.build(ctx)
       { value = 1, label = "ESC 2" }
     }
     local escTargetVal = ui.escTarget or 0
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Target", escOptions, escTargetVal, function(val)
+    local targetLabel = pageText(i18n, "esc_target", "ESC Target")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
       local targetVal = tonumber(val) or 0
       if ui.escTarget ~= targetVal then
         ui.escTarget = targetVal
@@ -539,7 +540,8 @@ function M.build(ctx)
     { value = 2, label = "Advanced" },
     { value = 3, label = "Limits" }
   }
-  rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
+  local sectionLabel = pageText(i18n, "esc_section", "Section")
+  rowH = Controls.appendComboSelect(children, x, cursorY, w, sectionLabel, sectionOptions, ui.currentSection, function(val)
     ui.currentSection = val
     -- The section is the whole of the session signature, and `M.wakeup` compares that signature
     -- on the next tick. Recording it here means the rebuild requested below is the only one:
@@ -566,7 +568,8 @@ function M.build(ctx)
       { value = 5, label = "Boat" },
       { value = 6, label = "Quad" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Mode", modeOpts, ui.config.esc_mode, function(val)
+    local modeLabel = pageText(i18n, "esc_mode", "ESC Mode")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, modeLabel, modeOpts, ui.config.esc_mode, function(val)
       ui.config.esc_mode = val
       markDirty()
     end)
@@ -576,7 +579,8 @@ function M.build(ctx)
       { value = 0, label = "CCW" },
       { value = 1, label = "CW" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Motor Rotation", rotOpts, ui.config.rotation, function(val)
+    local motorRotationLabel = pageText(i18n, "esc_motor_rotation", "Motor Rotation")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, motorRotationLabel, rotOpts, ui.config.rotation, function(val)
       ui.config.rotation = val
       markDirty()
     end)
@@ -589,7 +593,8 @@ function M.build(ctx)
       { value = 3, label = "8.3 V" },
       { value = 4, label = "Disabled" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "BEC Voltage", becOpts, ui.config.bec_voltage, function(val)
+    local becVoltageLabel = pageText(i18n, "esc_bec_voltage", "BEC Voltage")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, becVoltageLabel, becOpts, ui.config.bec_voltage, function(val)
       ui.config.bec_voltage = val
       markDirty()
     end)
@@ -602,7 +607,8 @@ function M.build(ctx)
       { value = 3, label = "Unsolicited" },
       { value = 4, label = "Fut S.Bus" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Telemetry Protocol", teleOpts, ui.config.telemetry_protocol, function(val)
+    local telemetryProtocolLabel = pageText(i18n, "telemetry_protocol", "Telemetry Protocol")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, telemetryProtocolLabel, teleOpts, ui.config.telemetry_protocol, function(val)
       ui.config.telemetry_protocol = val
       markDirty()
     end)
@@ -610,7 +616,7 @@ function M.build(ctx)
 
   elseif ui.currentSection == 2 then
     -- Advanced Settings
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Soft Start Time", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_soft_start_time", "Soft Start Time"), {
       min = 0, max = 60000, step = 1000,
       display = function(val) return string.format("%ds", math.floor(val / 1000)) end,
       get = function() return ui.config.soft_start_time end,
@@ -621,7 +627,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Runup Time", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_runup_time", "Runup Time"), {
       min = 0, max = 60000, step = 1000,
       display = function(val) return string.format("%ds", math.floor(val / 1000)) end,
       get = function() return ui.config.runup_time end,
@@ -632,7 +638,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Bailout Time", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_bailout_time", "Bailout Time"), {
       min = 0, max = 100000, step = 1000,
       display = function(val) return string.format("%ds", math.floor(val / 1000)) end,
       get = function() return ui.config.bailout end,
@@ -643,7 +649,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor P Gain", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_p_gain", "Governor P Gain"), {
       min = 30, max = 180, step = 1,
       display = function(val) return string.format("%.2f", val / 100) end,
       get = function() return ui.config.gov_proportional end,
@@ -654,7 +660,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor I Gain", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_governor_i_gain", "Governor I Gain"), {
       min = 150, max = 250, step = 1,
       display = function(val) return string.format("%.2f", val / 100) end,
       get = function() return ui.config.gov_integral end,
@@ -669,7 +675,8 @@ function M.build(ctx)
       { value = 0, label = "On" },
       { value = 1, label = "Off" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Sound", soundOpts, ui.config.motor_startup_sound, function(val)
+    local startupSoundLabel = pageText(i18n, "esc_startup_sound", "Startup Sound")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, startupSoundLabel, soundOpts, ui.config.motor_startup_sound, function(val)
       ui.config.motor_startup_sound = val
       markDirty()
     end)
@@ -677,7 +684,7 @@ function M.build(ctx)
 
   elseif ui.currentSection == 3 then
     -- Limits Settings
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Protection Delay", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_protection_delay", "Protection Delay"), {
       min = 0, max = 5000, step = 1000,
       display = function(val) return string.format("%ds", math.floor(val / 1000)) end,
       get = function() return ui.config.protection_delay end,
@@ -688,7 +695,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Cutoff Handling", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_cutoff_handling", "Cutoff Handling"), {
       min = 0, max = 10000, step = 100,
       display = function(val) return string.format("%d%%", math.floor(val / 100)) end,
       get = function() return ui.config.cutoff_handling end,
@@ -699,7 +706,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Max Temperature", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_max_temperature", "Max Temperature"), {
       min = 0, max = 40000, step = 100,
       display = function(val) return string.format("%dC", math.floor(val / 100)) end,
       get = function() return ui.config.max_temperature end,
@@ -710,7 +717,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Max Current", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_max_current", "Max Current"), {
       min = 0, max = 30000, step = 100,
       display = function(val) return string.format("%dA", math.floor(val / 100)) end,
       get = function() return ui.config.max_current end,
@@ -721,7 +728,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Min Voltage", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_min_voltage", "Min Voltage"), {
       min = 0, max = 7000, step = 100,
       display = function(val) return string.format("%.1fV", val / 100) end,
       get = function() return ui.config.min_voltage end,
@@ -732,7 +739,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Max Capacity Used", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_max_capacity_used", "Max Capacity Used"), {
       min = 0, max = 6000, step = 100,
       display = function(val) return string.format("%.1fAh", val / 100) end,
       get = function() return ui.config.max_used end,

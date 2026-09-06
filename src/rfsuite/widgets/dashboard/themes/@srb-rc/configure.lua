@@ -146,10 +146,29 @@ function M.build(ctx)
   local x, y, w = ctx.x, ctx.y, ctx.w
   local cursorY = y
 
+  local i18n = ctx.i18n
+  local becWarnLabel = "BEC Warning"
+  local escWarnLabel = "ESC Warning"
+  local escMaxLabel = "ESC Max"
+  if i18n and i18n.t then
+    local becWarnTranslated = i18n.t("widgets.dashboard.bec_warning")
+    if becWarnTranslated and becWarnTranslated ~= "widgets.dashboard.bec_warning" and becWarnTranslated ~= "" then
+      becWarnLabel = becWarnTranslated
+    end
+    local escWarnTranslated = i18n.t("widgets.dashboard.esc_warning")
+    if escWarnTranslated and escWarnTranslated ~= "widgets.dashboard.esc_warning" and escWarnTranslated ~= "" then
+      escWarnLabel = escWarnTranslated
+    end
+    local escMaxTranslated = i18n.t("widgets.dashboard.esc_max")
+    if escMaxTranslated and escMaxTranslated ~= "widgets.dashboard.esc_max" and escMaxTranslated ~= "" then
+      escMaxLabel = escMaxTranslated
+    end
+  end
+
   Controls.appendSectionHeader(children, x, cursorY, w, "@SRB-RC", true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
-  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, "BEC Warning", {
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, becWarnLabel, {
     min = 50,
     max = 150,
     get = getBecWarn,
@@ -159,7 +178,7 @@ function M.build(ctx)
     end
   })
 
-  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, "ESC Warning", {
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, escWarnLabel, {
     min = 0,
     max = 199,
     get = getEscWarn,
@@ -169,7 +188,7 @@ function M.build(ctx)
     end
   })
 
-  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, "ESC Max", {
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, escMaxLabel, {
     min = 1,
     max = 200,
     get = getEscMax,

@@ -656,7 +656,8 @@ function M.build(ctx)
       { value = 1, label = "ESC 2" }
     }
     local escTargetVal = ui.escTarget or 0
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Target", escOptions, escTargetVal, function(val)
+    local targetLabel = pageText(i18n, "esc_target", "ESC Target")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
       local targetVal = tonumber(val) or 0
       if ui.escTarget ~= targetVal then
         ui.escTarget = targetVal
@@ -676,7 +677,8 @@ function M.build(ctx)
     { value = 3, label = "Beacon" },
     { value = 4, label = "Other" }
   }
-  rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
+  local sectionLabel = pageText(i18n, "esc_section", "Section")
+  rowH = Controls.appendComboSelect(children, x, cursorY, w, sectionLabel, sectionOptions, ui.currentSection, function(val)
     ui.currentSection = val
     -- The section is the whole of the session signature, and `M.wakeup` compares that signature
     -- on the next tick. Recording it here means the rebuild requested below is the only one:
@@ -700,7 +702,8 @@ function M.build(ctx)
       { value = 2, label = "Forward/Reverse (3D)" },
       { value = 3, label = "Forward/Reverse (3D) Rev" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Motor Direction", dirOpts, ui.config.motor_direction, function(val)
+    local motorDirectionLabel = pageText(i18n, "esc_motor_direction", "Motor Direction")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, motorDirectionLabel, dirOpts, ui.config.motor_direction, function(val)
       ui.config.motor_direction = val
       markDirty()
     end)
@@ -718,7 +721,7 @@ function M.build(ctx)
         { value = 12, label = "24% (1.25)" },
         { value = 13, label = "29% (1.50)" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Rampup Start Power", startPowerOpts, ui.config.rpm_power_slope, function(val)
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "esc_rampup_start_power", "Rampup Start Power"), startPowerOpts, ui.config.rpm_power_slope, function(val)
         ui.config.rpm_power_slope = val
         markDirty()
       end)
@@ -740,14 +743,15 @@ function M.build(ctx)
         { value = 13, label = "13x (Less protection)" },
         { value = 0, label = "Off" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Rampup Power", rampPowerOpts, ui.config.rpm_power_slope, function(val)
+      local rampupPowerLabel = pageText(i18n, "esc_rampup_power", "Rampup Power")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, rampupPowerLabel, rampPowerOpts, ui.config.rpm_power_slope, function(val)
         ui.config.rpm_power_slope = val
         markDirty()
       end)
       cursorY = cursorY + rowH
     end
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Min Startup Power", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_min_startup_power", "Min Startup Power"), {
       min = 1000, max = 1125, step = 5,
       get = function() return ui.config.startup_power_min end,
       set = function(val)
@@ -758,7 +762,7 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     if ui.layoutRevision == nil or ui.layoutRevision >= 201 then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Max Startup Power", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_max_startup_power", "Max Startup Power"), {
         min = 1004, max = 1300, step = 4,
         get = function() return ui.config.startup_power_max end,
         set = function(val)
@@ -786,7 +790,8 @@ function M.build(ctx)
           { value = 96, label = "96kHz" }
         }
       end
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "PWM Frequency", pwmOpts, ui.config.pwm_frequency, function(val)
+      local pwmFrequencyLabel = pageText(i18n, "esc_pwm_frequency", "PWM Frequency")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, pwmFrequencyLabel, pwmOpts, ui.config.pwm_frequency, function(val)
         ui.config.pwm_frequency = val
         markDirty()
       end)
@@ -802,7 +807,8 @@ function M.build(ctx)
       { value = 3, label = "22.5 deg (Medium High)" },
       { value = 4, label = "30 deg (High)" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Motor Timing", timingOpts, ui.config.commutation_timing, function(val)
+    local motorTimingLabel = pageText(i18n, "esc_motor_timing", "Motor Timing")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, motorTimingLabel, timingOpts, ui.config.commutation_timing, function(val)
       ui.config.commutation_timing = val
       markDirty()
     end)
@@ -813,7 +819,8 @@ function M.build(ctx)
       { value = 1, label = "Low" },
       { value = 2, label = "High" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Demag Compensation", demagOpts, ui.config.demag_compensation, function(val)
+    local demagCompensation = pageText(i18n, "esc_demag_compensation", "Demag Compensation")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, demagCompensation, demagOpts, ui.config.demag_compensation, function(val)
       ui.config.demag_compensation = val
       markDirty()
     end)
@@ -823,7 +830,8 @@ function M.build(ctx)
       { value = 0, label = "Off" },
       { value = 1, label = "On" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Brake on Stop", brakeOpts, ui.config.brake_on_stop, function(val)
+    local brakeOnStopLabel = pageText(i18n, "esc_brake_on_stop", "Brake on Stop")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, brakeOnStopLabel, brakeOpts, ui.config.brake_on_stop, function(val)
       ui.config.brake_on_stop = val
       markDirty()
     end)
@@ -835,13 +843,14 @@ function M.build(ctx)
         { value = 1, label = "Not during startup" },
         { value = 2, label = "On" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Braking Mode", brakingModeOpts, ui.config.braking_strength, function(val)
+      local brakingMode = pageText(i18n, "esc_braking_mode", "Braking Mode")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, brakingMode, brakingModeOpts, ui.config.braking_strength, function(val)
         ui.config.braking_strength = val
         markDirty()
       end)
       cursorY = cursorY + rowH
     elseif ui.layoutRevision ~= nil and ui.layoutRevision >= 204 then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Braking Strength", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_braking_strength", "Braking Strength"), {
         min = 0, max = 255, step = 1,
         get = function() return ui.config.braking_strength end,
         set = function(val)
@@ -863,7 +872,8 @@ function M.build(ctx)
         { value = 0x3C, label = "Yellow" },
         { value = 0x3F, label = "White" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "LED Control", ledOpts, ui.config.led_control, function(val)
+      local ledControlLabel = pageText(i18n, "esc_led_control", "LED Control")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, ledControlLabel, ledOpts, ui.config.led_control, function(val)
         ui.config.led_control = val
         markDirty()
       end)
@@ -872,7 +882,7 @@ function M.build(ctx)
 
   elseif ui.currentSection == 3 then
     -- Beacon Settings
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Beep Strength", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_beep_strength", "Beep Strength"), {
       min = 1, max = 255, step = 1,
       get = function() return ui.config.beep_strength end,
       set = function(val)
@@ -882,7 +892,7 @@ function M.build(ctx)
     })
     cursorY = cursorY + rowH
 
-    rowH = Controls.appendNumberField(children, x, cursorY, w, "Beacon Strength", {
+    rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_beacon_strength", "Beacon Strength"), {
       min = 1, max = 255, step = 1,
       get = function() return ui.config.beacon_strength end,
       set = function(val)
@@ -899,7 +909,8 @@ function M.build(ctx)
       { value = 3, label = "10 minutes" },
       { value = 4, label = "Infinite" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Beacon Delay", beaconDelayOpts, ui.config.beacon_delay, function(val)
+    local beaconDelayLabel = pageText(i18n, "esc_beacon_delay", "Beacon Delay")
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, beaconDelayLabel, beaconDelayOpts, ui.config.beacon_delay, function(val)
       ui.config.beacon_delay = val
       markDirty()
     end)
@@ -913,7 +924,8 @@ function M.build(ctx)
           { value = 1, label = "Normal" },
           { value = 2, label = "Custom" }
         }
-        rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Beep", startupBeepOpts, ui.config.startup_beep, function(val)
+        local startupBeepLabel = pageText(i18n, "esc_startup_beep", "Startup Beep")
+        rowH = Controls.appendComboSelect(children, x, cursorY, w, startupBeepLabel, startupBeepOpts, ui.config.startup_beep, function(val)
           ui.config.startup_beep = val
           markDirty()
         end)
@@ -923,7 +935,8 @@ function M.build(ctx)
           { value = 0, label = "Off" },
           { value = 1, label = "On" }
         }
-        rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Beep", startupBeepOpts, ui.config.startup_beep, function(val)
+        local startupBeep = pageText(i18n, "esc_startup_beep", "Startup Beep")
+        rowH = Controls.appendComboSelect(children, x, cursorY, w, startupBeep, startupBeepOpts, ui.config.startup_beep, function(val)
           ui.config.startup_beep = val
           markDirty()
         end)
@@ -943,7 +956,7 @@ function M.build(ctx)
       { value = 6, label = "130C" },
       { value = 7, label = "140C" }
     }
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Temperature Protection", tempOpts, ui.config.temperature_protection, function(val)
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "esc_temperature_protection", "Temperature Protection"), tempOpts, ui.config.temperature_protection, function(val)
       ui.config.temperature_protection = val
       markDirty()
     end)
@@ -954,7 +967,7 @@ function M.build(ctx)
         { value = 0, label = "Off" },
         { value = 1, label = "On" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Low RPM Power Protection", lowRpmOpts, ui.config.low_rpm_power_protection, function(val)
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "esc_low_rpm_power_protection", "Low RPM Power Protection"), lowRpmOpts, ui.config.low_rpm_power_protection, function(val)
         ui.config.low_rpm_power_protection = val
         markDirty()
       end)
@@ -966,7 +979,8 @@ function M.build(ctx)
         { value = 0, label = "1S" },
         { value = 1, label = "2S+" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Power Rating", powerOpts, ui.config.power_rating, function(val)
+      local powerRatingLabel = pageText(i18n, "esc_power_rating", "Power Rating")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, powerRatingLabel, powerOpts, ui.config.power_rating, function(val)
         ui.config.power_rating = val
         markDirty()
       end)
@@ -978,7 +992,8 @@ function M.build(ctx)
         { value = 0, label = "Off" },
         { value = 1, label = "On" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Force EDT Arm", edtOpts, ui.config.force_edt_arm, function(val)
+      local forceEdtArmLabel = pageText(i18n, "esc_force_edt_arm", "Force EDT Arm")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, forceEdtArmLabel, edtOpts, ui.config.force_edt_arm, function(val)
         ui.config.force_edt_arm = val
         markDirty()
       end)
@@ -990,7 +1005,8 @@ function M.build(ctx)
         { value = 0, label = "Off" },
         { value = 1, label = "On" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Dithering", ditherOpts, ui.config.dithering, function(val)
+      local ditheringLabel = pageText(i18n, "esc_dithering", "Dithering")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, ditheringLabel, ditherOpts, ui.config.dithering, function(val)
         ui.config.dithering = val
         markDirty()
       end)
@@ -998,7 +1014,7 @@ function M.build(ctx)
     end
 
     if ui.layoutRevision ~= nil and ui.layoutRevision >= 209 then
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Threshold 96to48", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_threshold_96to48", "Threshold 96to48"), {
         min = 0, max = 100, step = 1, suffix = "%",
         get = function() return ui.config.threshold_96to48 end,
         set = function(val)
@@ -1008,7 +1024,7 @@ function M.build(ctx)
       })
       cursorY = cursorY + rowH
 
-      rowH = Controls.appendNumberField(children, x, cursorY, w, "Threshold 48to24", {
+      rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_threshold_48to24", "Threshold 48to24"), {
         min = 0, max = 100, step = 1, suffix = "%",
         get = function() return ui.config.threshold_48to24 end,
         set = function(val)

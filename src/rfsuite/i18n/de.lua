@@ -47,6 +47,8 @@ return {
     model_armed_badge = "!",
     model_armed_banner = "Modell ist ARMED - Einstellungen gesperrt",
     model_armed_warning = "Modell ist ARMED! Bitte disarmen.",
+    model_armed_save_blocked = "Speichern gesperrt: Modell ist ARMED!",
+    model_armed_reload_blocked = "Neu laden gesperrt: Modell ist ARMED!",
     header_system = "System",
     header_configuration = "Konfiguration",
     modules = {
@@ -644,7 +646,7 @@ return {
         section_preview = "Vorschau",
         section_development = "Entwicklung",
         save_confirm = "Bestätigen beim Speichern",
-        save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
+        save_armed_warning = "Warnung 'Bitte disarmen' bei Speichern/Neuladen",
         reload_confirm = "Bestätigen beim Neuladen",
         preview_setup_wizard = "Setup-Assistent",
         preview_confirm_setup_wizard = "Der Setup-Assistent ist noch nicht fertig. Seine Seiten und deren Reihenfolge können sich noch ändern, und er kann auf den Flight Controller schreiben. Prüfe vor dem Fliegen, was er geschrieben hat. Trotzdem anzeigen?",

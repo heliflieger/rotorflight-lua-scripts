@@ -43,6 +43,7 @@ local manifest = {
       pages = {
         { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", menuId = "tools_copy_profiles_page", icon = "@pages/tools/copy.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
         { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", menuId = "tools_select_profile_page", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
+        { id = "flight_log", title = "@i18n(app.modules.flight_log.name)@", menuId = "tools_flight_log_page", icon = "@pages/tools/flight_log/icon.png", visibleWhen = "previewFlightLog", lockedWhileArmed = true },
         { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png" }
       }
     },
@@ -642,6 +643,10 @@ local manifest = {
     },
     tools_copy_profiles_page = {
       title = "@i18n(app.modules.copyprofiles.name)@",
+      pages = {}
+    },
+    tools_flight_log_page = {
+      title = "@i18n(app.modules.flight_log.name)@",
       pages = {}
     },
     logs_page = {

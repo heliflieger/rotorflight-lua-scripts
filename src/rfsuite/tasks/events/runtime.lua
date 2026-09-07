@@ -58,7 +58,36 @@ local state = {
   linkDownSince = nil,
   linkStableUp = false,
   lastArmed = nil,
+  -- Which arm/disarm category still has work, if either does. See driveEdgeRunner below.
+  edgeRunner = nil,
 }
+
+-- One pass of an arm or disarm runner, and whether it still has work.
+--
+-- The runner completes AT MOST ONE task per wakeup by design: it takes the first eligible entry
+-- of the manifest, calls it and returns. So an edge that wakes it exactly once runs the first
+-- entry and nothing else -- and not even that one to the end, because a task waiting on an MSP
+-- reply needs a later pass to report itself complete. Measured on the disarm chain: `flight_stats`
+-- was started and never marked complete, and `dataflash_summary` behind it was never started at
+-- all. `onconnect` above does not have this problem because it is called on every pass while it
+-- says it is active; this is the same shape for the two edge categories.
+local function driveEdgeRunner(category, context)
+  local runner = ensureEventRunner(category)
+  if not runner then return false end
+
+  if type(runner.wakeup) == "function" then
+    local ok, err = pcall(runner.wakeup, { context = context })
+    if not ok and Log and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.events", category .. ".wakeup error: " .. tostring(err), "error")
+    end
+  end
+
+  if type(runner.active) == "function" then
+    local ok, active = pcall(runner.active)
+    return ok and active == true
+  end
+  return false
+end
 
 local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
@@ -97,6 +126,11 @@ local function publishConnected(val)
   if val == false then
     session.fblConnected = false
     session.flightcount = 0
+    -- The flight record belongs to the connection: which battery was picked for it, and whether
+    -- a use has already been counted against that pack. A link that comes back is, as far as
+    -- anything here can tell, a fresh pack, so the record is dropped rather than carried into
+    -- it. A record still open goes with it -- nothing disarmed, so there is no honest duration.
+    session.flightlog = nil
     -- The tool and each widget are separate Lua states holding their own copy of what the card
     -- said, and the state that renames is usually not the state that puts the name back. One
     -- that first read the file while it was still empty would answer "nothing to do" for the
@@ -295,30 +329,26 @@ function Events.wakeup()
     end
     if armed ~= state.lastArmed then
       state.lastArmed = armed
-      if armed then
-        local onarm = ensureEventRunner("onarm")
-        if onarm and type(onarm.wakeup) == "function" then
-          local ok, err = pcall(onarm.wakeup)
-          if not ok and Log and type(Log.emit) == "function" then
-            pcall(Log.emit, "rfsuite.events", "onarm.wakeup error: " .. tostring(err), "error")
-          end
+      local category = armed and "onarm" or "ondisarm"
+      local runner = ensureEventRunner(category)
+      if runner and type(runner.resetAllTasks) == "function" then
+        -- Reset on BOTH edges, because neither is a one-off. The runner marks a task complete
+        -- when it reports itself finished and never looks at it again; without this the first
+        -- arm of a session would be the only one an onarm task ever saw. A task that does not
+        -- report itself finished fares no better: it is re-queued on a timeout it can only meet
+        -- by being called twice inside 25 s, and the runner gives up on it after three rounds.
+        local ok, err = pcall(runner.resetAllTasks)
+        if not ok and Log and type(Log.emit) == "function" then
+          pcall(Log.emit, "rfsuite.events", category .. ".resetAllTasks error: " .. tostring(err), "error")
         end
-      else
-        local ondisarm = ensureEventRunner("ondisarm")
-        if ondisarm then
-          if type(ondisarm.resetAllTasks) == "function" then
-            local ok, err = pcall(ondisarm.resetAllTasks)
-            if not ok and Log and type(Log.emit) == "function" then
-              pcall(Log.emit, "rfsuite.events", "ondisarm.resetAllTasks error: " .. tostring(err), "error")
-            end
-          end
-          if type(ondisarm.wakeup) == "function" then
-            local ok, err = pcall(ondisarm.wakeup, { context = context })
-            if not ok and Log and type(Log.emit) == "function" then
-              pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error")
-            end
-          end
-        end
+      end
+      state.edgeRunner = category
+    end
+
+    -- Driven until it says it has nothing left, not once at the edge -- see driveEdgeRunner.
+    if state.edgeRunner then
+      if not driveEdgeRunner(state.edgeRunner, context) then
+        state.edgeRunner = nil
       end
     end
   end

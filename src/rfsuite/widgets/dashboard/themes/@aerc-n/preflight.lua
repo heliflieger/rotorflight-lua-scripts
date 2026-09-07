@@ -33,7 +33,7 @@ local function cfgValue(key, fallback, state)
   return fallback
 end
 
-Theme.layout = { cols = 6, rows = 12, padding = 1 }
+Theme.layout = { cols = 6, rows = 12, padding = 1, bgcolor = WHITE }
 
 Theme.boxes = {
   -- Left column: Text info

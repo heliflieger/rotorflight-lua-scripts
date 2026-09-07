@@ -51,7 +51,7 @@ local function isCompactDisplay(state)
   return not (w and w >= 760)
 end
 
-Theme.layout = { cols = 13, rows = 10, padding = 1 }
+Theme.layout = { cols = 13, rows = 10, padding = 1, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 4, rowspan = 3, type = "text", subtype = "governor", title = "@i18n(widgets.dashboard.governor):upper()@", titlepos = "top", titlealign = CENTER, titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, warningcolor = WHITE, activecolor = WHITE, bgcolor = OLIVE },

@@ -5,7 +5,7 @@
 
 local Theme = {}
 
-Theme.layout = { cols = 6, rows = 12 }
+Theme.layout = { cols = 6, rows = 12, bgcolor = WHITE }
 
 Theme.boxes = {
   -- Column 1: Flight times and counts (left)

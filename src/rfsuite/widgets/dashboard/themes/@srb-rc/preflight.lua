@@ -41,7 +41,7 @@ local function isCompactDisplay(state)
   return not (w and w >= 760)
 end
 
-Theme.layout = { cols = 13, rows = 10, padding = 1, showstats = false }
+Theme.layout = { cols = 13, rows = 10, padding = 1, showstats = false, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 4, rowspan = 3, type = "text", subtype = "telemetry", source = "model_name", title = "@i18n(widgets.dashboard.craft_name):upper()@", titlepos = "top", titlealign = CENTER, titlefont = SMLSIZE, font = DBLSIZE, textcolor = "orange", titlecolor = WHITE, bgcolor = BLACK },

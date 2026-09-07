@@ -33,7 +33,7 @@ local function cfgValue(key, fallback, state)
   return fallback
 end
 
-Theme.layout = { cols = 7, rows = 12, padding = 1 }
+Theme.layout = { cols = 7, rows = 12, padding = 1, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 3, rowspan = 9, type = "image", subtype = "model", bgcolor = BLACK },

@@ -1,6 +1,6 @@
 local Theme = {}
 
-Theme.layout = { cols = 2, rows = 3, padding = 2 }
+Theme.layout = { cols = 2, rows = 3, padding = 2, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, type = "text", subtype = "stats", source = "voltage", stattype = "min", title = "@i18n(widgets.dashboard.min_voltage):upper()@", unit = "V", decimals = 1, titlepos = "bottom", titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE, bgcolor = BLACK },

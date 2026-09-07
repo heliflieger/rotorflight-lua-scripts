@@ -10,7 +10,7 @@ local function voltageMax(_, state)
   return tonumber(cfg and cfg.v_max) or 8.4
 end
 
-Theme.layout = { cols = 8, rows = 14, padding = 2 }
+Theme.layout = { cols = 8, rows = 14, padding = 2, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 4, rowspan = 12, type = "gauge", subtype = "arc", source = "bec_voltage", unit = "V", decimals = 2, min = voltageMin, max = voltageMax, title = "@i18n(widgets.dashboard.voltage):upper()@", titlepos = "bottom", titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE, bgcolor = BLACK, fillbgcolor = COLOR_THEME_SECONDARY2 },

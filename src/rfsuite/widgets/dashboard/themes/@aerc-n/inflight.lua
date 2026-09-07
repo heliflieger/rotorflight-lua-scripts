@@ -14,7 +14,7 @@ local function isCompactDisplay(state)
   return not (w and w >= 760)
 end
 
-Theme.layout = { cols = 6, rows = 12, padding = 1 }
+Theme.layout = { cols = 6, rows = 12, padding = 1, bgcolor = WHITE }
 
 Theme.boxes = {
   -- Left: RPM Arc Gauge

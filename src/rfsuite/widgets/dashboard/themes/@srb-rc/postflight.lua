@@ -1,6 +1,6 @@
 local Theme = {}
 
-Theme.layout = { cols = 3, rows = 3, padding = 1, showstats = false }
+Theme.layout = { cols = 3, rows = 3, padding = 1, showstats = false, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 1, rowspan = 1, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_duration):upper()@", titlepos = "top", titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK },

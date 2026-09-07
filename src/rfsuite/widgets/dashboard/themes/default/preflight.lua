@@ -4,7 +4,7 @@ local function autoFont(box, state)
   return (state and (state.zoneW or 0) <= 480) and SMLSIZE or MIDSIZE
 end
 
-Theme.layout = { cols = 20, rows = 8, padding = 1 }
+Theme.layout = { cols = 20, rows = 8, padding = 1, bgcolor = WHITE }
 
 Theme.boxes = function(_, state)
 	return {

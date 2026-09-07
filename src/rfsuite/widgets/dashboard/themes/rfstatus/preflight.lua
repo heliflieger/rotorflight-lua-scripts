@@ -10,7 +10,7 @@ local function voltageMax(_, state)
   return tonumber(cfg and cfg.v_max) or 25.2
 end
 
-Theme.layout = { cols = 20, rows = 8, padding = 2 }
+Theme.layout = { cols = 20, rows = 8, padding = 2, bgcolor = WHITE }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 6, rowspan = 3, type = "image", subtype = "model", bgcolor = BLACK },

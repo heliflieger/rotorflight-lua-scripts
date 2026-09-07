@@ -1790,7 +1790,8 @@ return {
         save_error_prefix = "Speicherfehler:",
         help_title = "Ports-Hilfe",
         help_p1 = "Konfigurieren Sie die Funktion und Baudrate fuer jeden seriellen Port auf dem Flugcontroller.",
-        help_p2 = "Speichern schreibt die Aenderungen in das EEPROM und startet den Flugcontroller neu."
+        help_p2 = "Speichern schreibt die Aenderungen in das EEPROM und startet den Flugcontroller neu.",
+        help_p3 = "Ist das Board-Layout bekannt, wird ein Port so benannt, wie er auf der Platine steht, mit dem UART-Namen in Klammern."
       },
       setup_alignment = {
         title = "Ausrichtung",

@@ -15,6 +15,8 @@ local Common = nil
 local MspRuntime = nil
 local SerialConfigApi = nil
 local RxConfigApi = nil
+local BoardInfoApi = nil
+local PortLabels = nil
 local ApiVersion = nil
 local LoadingOverlay = nil
 local t = nil
@@ -76,6 +78,7 @@ local ui = {
   portsOriginal = {},
   portsWorking = {},
   rxSerialProvider = 0,
+  boardDesign = nil,
   runtime = newRuntime(),
   loading = false,
   progress = 0,
@@ -93,6 +96,8 @@ local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not SerialConfigApi then SerialConfigApi = loadModule("tasks/msp/api/serial_config.lua") end
   if not RxConfigApi then RxConfigApi = loadModule("tasks/msp/api/rx_config.lua") end
+  if not BoardInfoApi then BoardInfoApi = loadModule("tasks/msp/api/board_info.lua") end
+  if not PortLabels then PortLabels = loadModule("lib/port_labels.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not t then t = Common and Common.pageT("setup_ports") or nil end
@@ -271,10 +276,26 @@ local function applyReceiverGuardToWorkingCopy()
   end
 end
 
+-- What a row is called.
+--
+-- The identifier the firmware reports is a UART number, and that is not what is written beside
+-- the socket: the board says "Port A" or "S.BUS", and which UART that is depends on the board.
+-- MSP_BOARD_INFO reports a board design, and the design is the key to the printed names, so a
+-- row carries both -- the label the pilot can find on the machine in front of him, and the UART
+-- name the firmware's CLI and the documentation use for the same socket.
+--
+-- The pairing is the Configurator's, which draws exactly this on its own Ports tab and falls
+-- back to the bare UART name for a design it has no map for
+-- (rotorflight-configurator src/js/tabs/configuration.js:475-481). A board outside those designs
+-- is the normal case rather than an error, and it looks exactly as this page always has.
 local function portLabel(identifier)
   local name = UART_NAMES[identifier]
-  if name then return name end
-  return pageText(nil, "port_prefix", "Port") .. " " .. tostring(identifier)
+  if not name then
+    return pageText(nil, "port_prefix", "Port") .. " " .. tostring(identifier)
+  end
+  local printed = PortLabels and PortLabels.label(ui.boardDesign, identifier)
+  if not printed then return name end
+  return printed .. " [" .. name .. "]"
 end
 
 local function loadFromSession()
@@ -286,6 +307,7 @@ local function loadFromSession()
     ui.portsWorking = clonePorts(saved.ports)
   end
   ui.rxSerialProvider = tonumber(saved.rxSerialProvider) or 0
+  ui.boardDesign = saved.boardDesign
 end
 
 local function saveToSession()
@@ -296,6 +318,7 @@ local function saveToSession()
   end
   session.setup_ports.ports = clonePorts(ui.portsWorking)
   session.setup_ports.rxSerialProvider = ui.rxSerialProvider
+  session.setup_ports.boardDesign = ui.boardDesign
 end
 
 local function queuePortsRead(isAutoReload)
@@ -317,6 +340,47 @@ local function queuePortsRead(isAutoReload)
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
+  end
+
+  local function finishRead()
+    ui.runtime.readPending = false
+    ui.loading = false
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  -- The third and last read, queued once the two below have answered: MSP_BOARD_INFO, which is
+  -- what tells this page which board it is talking to and so what that board calls its sockets.
+  --
+  -- A failure here ends the read the same way a success does. A board that does not answer the
+  -- command, or answers with a design nothing is known about, leaves every row with its plain
+  -- UART name -- which is what this page showed before it asked at all, and is not a reason to
+  -- withhold the port configuration the two reads before it already have.
+  local function queueBoardInfoRead()
+    if not BoardInfoApi then
+      ui.progress = 100
+      finishRead()
+      return
+    end
+
+    queue:add({
+      command = BoardInfoApi.command,
+      simulatorResponse = BoardInfoApi.simulatorResponse,
+      processReply = function(self, buf)
+        local parsed = BoardInfoApi.parse(buf)
+        ui.boardDesign = parsed and parsed.board_design or nil
+        saveToSession()
+        ui.progress = 100
+        finishRead()
+      end,
+      errorHandler = function()
+        ui.boardDesign = nil
+        saveToSession()
+        ui.progress = 100
+        finishRead()
+      end
+    })
   end
 
   -- Step 1: Read SERIAL_CONFIG
@@ -351,7 +415,7 @@ local function queuePortsRead(isAutoReload)
       end
 
       -- Step 2: Read RX_CONFIG
-      ui.progress = 50
+      ui.progress = 33
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -366,20 +430,17 @@ local function queuePortsRead(isAutoReload)
             saveToSession()
           end
 
-          ui.runtime.readPending = false
-          ui.loading = false
           ui.dirty = false
-          ui.progress = 100
+          ui.progress = 66
           if type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
+
+          queueBoardInfoRead()
         end,
         errorHandler = function()
-          ui.runtime.readPending = false
-          ui.loading = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
+          ui.progress = 66
+          queueBoardInfoRead()
         end
       })
     end,
@@ -745,6 +806,8 @@ function M.onClose()
   MspRuntime = nil
   SerialConfigApi = nil
   RxConfigApi = nil
+  BoardInfoApi = nil
+  PortLabels = nil
   ApiVersion = nil
   LoadingOverlay = nil
   t = nil

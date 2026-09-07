@@ -1790,7 +1790,8 @@ return {
         save_error_prefix = "Save error:",
         help_title = "Ports Help",
         help_p1 = "Configure the function and baud rate for each serial port on the flight controller.",
-        help_p2 = "Save writes changes to EEPROM and reboots the flight controller."
+        help_p2 = "Save writes changes to EEPROM and reboots the flight controller.",
+        help_p3 = "Where the board layout is known, a port is named as the board prints it, with its UART name in brackets."
       },
       setup_alignment = {
         title = "Alignment",

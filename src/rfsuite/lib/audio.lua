@@ -66,6 +66,20 @@ local GOVERNOR_PREF_KEYS = {
 -- otherwise still be playing, or be skipped by the cooldown, when the next one is due.
 local GOVERNOR_HOLD_SECONDS = 0.3
 
+-- The `link` key's search path in lib/sensors.lua ends in 1RSS and 2RSS, and those carry an
+-- RSSI in dBm rather than a link quality in percent. A percent threshold held against a
+-- negative dBm reading is below itself on every sample, so the alert has to know which
+-- sensor answered before it says anything.
+local RSSI_LINK_SOURCES = {
+  ["1RSS"] = true,
+  ["2RSS"] = true
+}
+
+-- How far the link has to climb back above a threshold before that level is left again. A
+-- quality resting on the threshold otherwise alternates between two levels, and each rise
+-- would speak.
+local LQ_HYSTERESIS = 5
+
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -227,6 +241,26 @@ end
 local function unitMah()
   if type(UNIT_MAH) == "number" then return UNIT_MAH end
   return 108 -- fallback typical for OpenTX/EdgeTX
+end
+
+local function unitCelsius()
+  if type(UNIT_CELSIUS) == "number" then return UNIT_CELSIUS end
+  return 0
+end
+
+local function unitVolts()
+  if type(UNIT_VOLTS) == "number" then return UNIT_VOLTS end
+  return 0
+end
+
+-- EdgeTX speaks a fractional value by taking the number in hundredths together with the PREC2
+-- attribute: radio/src/lua/api_general.cpp documents playNumber's third argument as "PREC2
+-- plays a number with two decimal places (for a number 123 it plays 1.23)". On a firmware
+-- that does not export the constant there are no decimals to be had, and the caller has to
+-- fall back to whole units -- which is what a zero here says.
+local function precTwo()
+  if type(PREC2) == "number" then return PREC2 end
+  return 0
 end
 
 local function emitLog(opts, msg, level)
@@ -683,6 +717,126 @@ local function announceBatteryCapacityEvent(self, opts)
   audioState.batteryCapacityAnnounced = true
 end
 
+-- The pack the model came up with is not full. Judged once per connection and then latched:
+-- in flight the per-cell voltage falls past any margin, and without the latch this would turn
+-- from one warning at power-up into a running commentary on the discharge.
+--
+-- Nothing is judged until everything it needs is there -- a pack voltage, a cell count and a
+-- battery configuration to take the full-cell voltage from -- so a missing piece costs a pass
+-- and not a wrong answer. The battery configuration arrives over MSP, which is the same
+-- reason the voltage alert skips until it is available.
+local function announcePackNotFullEvent(self, events, opts)
+  local audioState = self.audioState
+  if audioState.packCheckDone then
+    return
+  end
+  if not prefEnabled(events, "pack_not_full", false) then
+    return
+  end
+
+  local voltage = tonumber(self.state and self.state.voltage)
+  if type(voltage) ~= "number" or voltage <= 0 then
+    return
+  end
+
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local bc = session and (session.batteryConfig or session.battery_config) or nil
+  if type(bc) ~= "table" then
+    return
+  end
+
+  -- A configured cell count of 0 means auto-detect, so telemetry answers instead.
+  local cells = tonumber(bc.batteryCellCount)
+  if not cells or cells <= 0 then
+    cells = tonumber(self.state and self.state.batteryCellCount)
+  end
+  if type(cells) ~= "number" then
+    return
+  end
+  cells = math.floor(cells + 0.5)
+  if cells <= 0 then
+    return
+  end
+
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then
+    return
+  end
+
+  -- The reasoning of seedInitialFuel further down, applied to this check: a caller that
+  -- rebuilt its audio state has not reconnected, and the pack it would report on was judged
+  -- when the craft actually came up. The flag clears itself, so a real reconnect judges again.
+  if audioState.seedPackCheck then
+    audioState.seedPackCheck = nil
+    audioState.packCheckDone = true
+    return
+  end
+
+  local fullCell = normalizeCellVoltage(bc.vbatmaxcellvoltage, 4.2)
+  local margin = tonumber(events.pack_not_full_margin) or 100
+  if margin < 0 then margin = 0 end
+  local perCell = voltage / cells
+
+  audioState.packCheckDone = true
+
+  if perCell >= fullCell - (margin / 1000) then
+    emitLog(opts, "pack check: full at " .. tostring(perCell) .. " V/cell over " .. tostring(cells) .. " cells", "debug")
+    return
+  end
+
+  emitLog(opts, "pack not full: " .. tostring(perCell) .. " V/cell against " .. tostring(fullCell)
+    .. " V less a " .. tostring(margin) .. " mV margin", "info")
+
+  -- notfull.wav is the one file this announcement would like the sound packs to gain. Every
+  -- pack ships voltage.wav, so one without it still says something rather than nothing, and
+  -- resolveEventPath caches the answer, so the probe costs one open per session.
+  local soundFile = "stat/alerts/notfull.wav"
+  if not resolveEventPath(soundFile) then
+    soundFile = "stat/alerts/voltage.wav"
+  end
+
+  if tryPlayEventFile(audioState, now, soundFile, opts) and type(playNumber) == "function" then
+    local attribute = precTwo()
+    local spoken = math.floor((perCell * 100) + 0.5)
+    if attribute == 0 then
+      spoken = math.floor(perCell + 0.5)
+    end
+    local ok, err = pcall(playNumber, spoken, unitVolts(), attribute)
+    if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+  end
+end
+
+-- Whether the value under `lq` may be read as a link quality in percent. Two independent
+-- tests, because either can be the only one available: the caller reports which sensor the
+-- search settled on, and the value has to fall inside the range a percentage has. A receiver
+-- without an `RQly` sensor answers with an RSSI in dBm, which is negative and would put the
+-- alert below any threshold for the whole flight.
+--
+-- Declining is logged once per connection. Repeating it would be several lines a second, and
+-- a receiver that reports no quality does not start reporting one later in the same session.
+local function linkIsQuality(self, audioState, lq, opts)
+  local source = self.state and self.state.lqSource
+  -- 0 is left out on purpose: it is what both callers read as "no link" -- the tool's
+  -- readiness test is `lq ~= 0`, the widget's telemetry latch the same -- and it is what
+  -- the link sensor reads once it has aged out, which on the widget happens while the MSP
+  -- side still counts as connected. Accepting it would announce a lost link as a quality
+  -- of nought, with the haptic, which is another announcement's job.
+  local usable = lq > 0 and lq <= 100
+  if type(source) == "string" and RSSI_LINK_SOURCES[source] then
+    usable = false
+  end
+  if usable then
+    return true
+  end
+
+  if not audioState.lqNotQualityLogged then
+    audioState.lqNotQualityLogged = true
+    emitLog(opts, "link quality alert off: link resolved to an RSSI rather than a percentage"
+      .. " (source=" .. tostring(source) .. " value=" .. tostring(lq) .. ")", "debug")
+  end
+  return false
+end
+
 --- Play one file out of the audio pack, by its path below `SOUNDS/rf/<locale>/`.
 --
 -- Exported because the locale fallback lives here and should live in exactly one place. The
@@ -718,6 +872,9 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelHasCapacity = nil
   audioState.smartfuelIsElectric = nil
   audioState.smartfuelEmptySound = nil
+  audioState.lqLevel = nil
+  audioState.lqNotQualityLogged = nil
+  audioState.packCheckDone = false
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -741,6 +898,8 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.bec_voltage = 0
     audioState.lastAlertAt.rx_voltage = 0
     audioState.lastAlertAt.flight_time = 0
+    audioState.lastAlertAt.lq = 0
+    audioState.lastAlertAt.mcu_temperature = 0
   end
 end
 
@@ -766,6 +925,8 @@ function Audio.process(self, opts)
   audioState.lastAlertAt.bec_voltage = tonumber(audioState.lastAlertAt.bec_voltage) or 0
   audioState.lastAlertAt.rx_voltage = tonumber(audioState.lastAlertAt.rx_voltage) or 0
   audioState.lastAlertAt.flight_time = tonumber(audioState.lastAlertAt.flight_time) or 0
+  audioState.lastAlertAt.lq = tonumber(audioState.lastAlertAt.lq) or 0
+  audioState.lastAlertAt.mcu_temperature = tonumber(audioState.lastAlertAt.mcu_temperature) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -812,6 +973,9 @@ function Audio.process(self, opts)
   announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
   announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
   announceBatteryCapacityEvent(self, opts)
+  -- Deliberately not gated on `initialized`: the first pass after a connect carries the pack's
+  -- resting voltage, which is the reading this check is about.
+  announcePackNotFullEvent(self, events, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
     -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,
@@ -877,6 +1041,75 @@ function Audio.process(self, opts)
         end
       else
         -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
+      end
+    end
+  end
+
+  -- The same shape as the ESC alert above, with one difference: no `scope = "model"`. The
+  -- ESC's limit describes one aircraft's hardware, while the flight controller's MCU is the
+  -- same silicon with the same rating in every model, so this threshold is radio-wide and
+  -- is read out of the global table only.
+  if prefEnabled(events, "mcu_temperature", false) then
+    local threshold = tonumber(events.mcu_threshold) or 80
+    local mcuTemp = tonumber(self.state.mcuTemp)
+    if type(mcuTemp) == "number" and mcuTemp >= threshold then
+      local lastAt = audioState.lastAlertAt.mcu_temperature or 0
+      if now - lastAt >= 10 then
+        if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
+          if type(playNumber) == "function" then
+            local ok, err = pcall(playNumber, math.floor(mcuTemp + 0.5), unitCelsius())
+            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+          end
+          if type(playHaptic) == "function" then
+            pcall(playHaptic, 15, 10, 3)
+          end
+          audioState.lastAlertAt.mcu_temperature = now
+        end
+      end
+    end
+  end
+
+  if prefEnabled(events, "lq_alert", false) then
+    local lq = tonumber(self.state.lq)
+    if type(lq) == "number" and linkIsQuality(self, audioState, lq, opts) then
+      local warn = tonumber(events.lq_warn) or 70
+      local critical = tonumber(events.lq_critical) or 50
+      -- A critical level above the warning level cannot be crossed second, so the lower of
+      -- the two is the critical one. Nothing is refused over it; the pair is just ordered.
+      if critical > warn then critical = warn end
+
+      local spoken = tonumber(audioState.lqLevel) or 0
+      local level = 0
+      if lq <= critical then
+        level = 2
+      elseif lq <= warn then
+        level = 1
+      end
+
+      -- Leaving a level costs LQ_HYSTERESIS points more than entering it.
+      if level < spoken then
+        if spoken >= 2 and lq <= critical + LQ_HYSTERESIS then
+          level = 2
+        elseif level < 1 and spoken >= 1 and lq <= warn + LQ_HYSTERESIS then
+          level = 1
+        end
+      end
+
+      if level < spoken then
+        -- Recovering is not announced; the next fall is.
+        audioState.lqLevel = level
+      elseif level > 0 and (level > spoken or now - (audioState.lastAlertAt.lq or 0) >= 10) then
+        if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
+          if type(playNumber) == "function" then
+            local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent())
+            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+          end
+          if level >= 2 and type(playHaptic) == "function" then
+            pcall(playHaptic, 15, 10, 3)
+          end
+          audioState.lqLevel = level
+          audioState.lastAlertAt.lq = now
+        end
       end
     end
   end

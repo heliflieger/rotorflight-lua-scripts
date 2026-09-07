@@ -174,6 +174,7 @@ return {
       audio_events_adjustment = { name = "Adjustments" },
       audio_events_fuel = { name = "Fuel" },
       audio_events_battery = { name = "Battery" },
+      audio_events_link = { name = "Link" },
       audio_events_other = { name = "Other" },
       msp_speed = { name = "MSP Speed" },
       api_tester = { name = "API Tester" },
@@ -732,6 +733,8 @@ return {
         section_voltage = "Voltage",
         section_profiles = "PID/Rate Profile",
         section_esc = "ESC Temperature",
+        section_mcu = "MCU Temperature",
+        section_link = "Link Quality",
         section_adjustment = "Adjustment Announcements",
         section_fuel = "Fuel",
         section_battery = "Battery",
@@ -750,11 +753,17 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Voltage",
+        pack_not_full = "Pack Not Full",
+        pack_not_full_margin = "Margin (mV/cell)",
         pid_profile = "PID Profile",
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
         esc_threshold = "Threshold (°)",
         esc_threshold_model = "Threshold (°) [Model]",
+        mcu_temperature = "MCU Temperature",
+        lq_alert = "Link Quality",
+        lq_warn = "Warning (%)",
+        lq_critical = "Critical (%)",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "Fuel",
         fuel_callout_percent = "Callout %",
@@ -783,13 +792,13 @@ return {
         help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
       },
       settings_audio_events_voltage = {
-        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration. The alert repeats every 10 seconds until the voltage recovers."
+        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration. The alert repeats every 10 seconds until the voltage recovers. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight."
       },
       settings_audio_events_profiles = {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
       },
       settings_audio_events_esc = {
-        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default."
+        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. Either alert repeats every 10 seconds while the temperature stays at or above its threshold."
       },
       settings_audio_events_adjustment = {
         help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
@@ -799,6 +808,9 @@ return {
       },
       settings_audio_events_battery = {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
+      },
+      settings_audio_events_link = {
+        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."

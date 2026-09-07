@@ -1342,6 +1342,10 @@ local function readTelemetry(state)
 
   setField("rpm", getSensor("rpm"))
   setField("lq", getSensor("link"))
+  -- Which sensor answered for `link`. The search path in lib/sensors.lua ends in 1RSS and
+  -- 2RSS, and those carry an RSSI in dBm rather than a quality in percent, which is a
+  -- difference a consumer of `lq` cannot see in the number alone.
+  setField("lqSource", Sensors.active_paths and Sensors.active_paths.link)
   setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))

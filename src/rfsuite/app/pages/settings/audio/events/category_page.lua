@@ -30,12 +30,17 @@ local GOVERNOR_STATES = {
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio event settings. `section` names the page
 -- that draws and saves an entry: a save writes its own section's keys and leaves the rest of
--- the table as the other pages left it.
+-- the table as the other pages left it. A numeric entry carries the range it is valid in, so
+-- that the clamp applied on load and the bounds of the control on screen cannot drift apart.
 
 local CONFIG_SCHEMA = {
   { key = "arming_flags",      type = "bool", default = true,  section = "arming" },
   { key = "governor_state",    type = "bool", default = true,  section = "governor" },
   { key = "voltage_alert",     type = "bool", default = true,  section = "voltage" },
+  { key = "pack_not_full",     type = "bool", default = false, section = "voltage" },
+  -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
+  -- a volt below the configured full-cell voltage.
+  { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "voltage" },
   { key = "pid_profile",       type = "bool", default = true,  section = "profiles" },
   { key = "rate_profile",      type = "bool", default = true,  section = "profiles" },
   { key = "esc_temperature",   type = "bool", default = false, section = "esc" },
@@ -43,11 +48,20 @@ local CONFIG_SCHEMA = {
   -- the ESC's temperature limit is a property of one model's hardware. It is read and
   -- written through the per-model store whenever there is one, and falls back to the
   -- global file on a radio that has none.
-  { key = "esc_threshold",     type = "number", default = 90, scope = "model", section = "esc" },
+  { key = "esc_threshold",     type = "number", default = 90, min = 60, max = 300, scope = "model", section = "esc" },
+  { key = "mcu_temperature",   type = "bool", default = false, section = "esc" },
+  -- No `scope = "model"`, unlike the ESC threshold above: the flight controller's MCU is the
+  -- same silicon with the same rating in every aircraft, so a copy of this limit per model
+  -- would be one more place to keep in step and nothing else.
+  { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
+  { key = "lq_alert",          type = "bool", default = false, section = "link" },
+  { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
+  { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
   { key = "adjustment_events", type = "bool", default = false, section = "adjustment" },
   { key = "fuel_alerts",       type = "bool", default = true,  section = "fuel" },
+  -- No range: the callout step is a choice out of FUEL_CALLOUT_VALUES below, not a free number.
   { key = "fuel_callout_percent", type = "number", default = 10, section = "fuel" },
-  { key = "fuel_repeat_below_zero", type = "number", default = 1, section = "fuel" },
+  { key = "fuel_repeat_below_zero", type = "number", default = 1, min = 1, max = 10, section = "fuel" },
   { key = "fuel_haptic_below_zero", type = "bool", default = false, section = "fuel" },
   { key = "battery_profile",   type = "bool", default = true,  section = "battery" },
   { key = "initial_fuel",      type = "bool", default = true,  section = "battery" },
@@ -62,10 +76,19 @@ for i = 1, #GOVERNOR_STATES do
   }
 end
 
+-- The schema by key, so that a row being drawn can reach its own range without walking the
+-- list once per row.
+local SCHEMA_BY_KEY = {}
+for i = 1, #CONFIG_SCHEMA do
+  SCHEMA_BY_KEY[CONFIG_SCHEMA[i].key] = CONFIG_SCHEMA[i]
+end
+
 -- ─── Sections ────────────────────────────────────────────────────────────────
 -- One entry per page. An item with `requires` is drawn only while that switch is on: the
 -- per-state rows qualify the governor master switch, and ten greyed-out rows under a switch
--- that is off would say nothing the switch does not.
+-- that is off would say nothing the switch does not. An item with `enabledBy` is always
+-- drawn and is editable only while that switch is on, which is what a single threshold
+-- under its own enable wants: the value stays readable.
 
 local SECTIONS = {
   arming = {
@@ -88,6 +111,9 @@ local SECTIONS = {
     titleFallback = "Voltage",
     items = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
+      { kind = "bool", key = "pack_not_full", labelKey = "pack_not_full", labelFallback = "Pack Not Full" },
+      { kind = "number", key = "pack_not_full_margin", labelKey = "pack_not_full_margin", labelFallback = "Margin (mV/cell)",
+        suffix = " mV", enabledBy = "pack_not_full" },
     },
   },
   profiles = {
@@ -103,7 +129,26 @@ local SECTIONS = {
     titleFallback = "ESC Temperature",
     items = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
-      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", min = 60, max = 300, suffix = "°" },
+      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
+        enabledBy = "esc_temperature" },
+      { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
+      { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
+      -- The label of the ESC threshold, on purpose: the row says the same thing, and the
+      -- subheader above it is what tells the two thresholds apart. modelScopeLabel keys on
+      -- the row's own key, so this one carries no [Model] marker.
+      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
+        enabledBy = "mcu_temperature" },
+    },
+  },
+  link = {
+    titleKey = "section_link",
+    titleFallback = "Link Quality",
+    items = {
+      { kind = "bool", key = "lq_alert", labelKey = "lq_alert", labelFallback = "Link Quality" },
+      { kind = "number", key = "lq_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
+        enabledBy = "lq_alert" },
+      { kind = "number", key = "lq_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
+        enabledBy = "lq_alert" },
     },
   },
   adjustment = {
@@ -119,7 +164,8 @@ local SECTIONS = {
     items = {
       { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Fuel" },
       { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Callout %" },
-      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Repeats below 0%", min = 1, max = 10, suffix = "x" },
+      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Repeats below 0%",
+        suffix = "x", enabledBy = "fuel_alerts" },
       { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "fuel_haptic_below_zero", labelFallback = "Haptic below 0%" },
     },
   },
@@ -207,14 +253,13 @@ function M.new(sectionKey)
     dirty = false,
     config = {},
     runtime = {
-      escThresholdEnabled = nil,
-      escThresholdGet = nil,
-      escThresholdSet = nil,
-      fuelEnabled = nil,
+      -- The number rows share one set of closures keyed on the row's own key, so a page
+      -- that gains a threshold gains no code here.
+      numberEnabled = nil,
+      numberGetters = nil,
+      numberSetters = nil,
       fuelCalloutGet = nil,
       fuelCalloutSet = nil,
-      fuelRepeatGet = nil,
-      fuelRepeatSet = nil,
       fuelHapticGet = nil,
       fuelHapticSet = nil
     }
@@ -252,45 +297,58 @@ function M.new(sectionKey)
     end
   end
 
-  local function getEscThresholdEnabled()
-    if ui.runtime.escThresholdEnabled then return ui.runtime.escThresholdEnabled end
-    ui.runtime.escThresholdEnabled = function()
-      return ui.config.esc_temperature == true
+  -- The closures behind the number rows. appendNumberField keeps whatever it is handed for
+  -- the life of the control, so a fresh closure per build would leave the previous one
+  -- pointing at a page state that is about to be replaced. They are cached on ui.runtime,
+  -- which onClose drops, and keyed on the row's own key rather than named per row.
+  local function numberCache(name)
+    local cache = rawget(ui.runtime, name)
+    if type(cache) ~= "table" then
+      cache = {}
+      ui.runtime[name] = cache
     end
-    return ui.runtime.escThresholdEnabled
+    return cache
   end
 
-  local function getEscThresholdGetter(minVal, maxVal)
-    if ui.runtime.escThresholdGet then return ui.runtime.escThresholdGet end
-    ui.runtime.escThresholdGet = function()
-      local current = tonumber(ui.config.esc_threshold) or minVal
+  -- Nil for a row that has no `enabledBy`: appendNumberField then leaves the control enabled.
+  local function getNumberEnabled(enabledBy)
+    if type(enabledBy) ~= "string" then return nil end
+    local cache = numberCache("numberEnabled")
+    if cache[enabledBy] then return cache[enabledBy] end
+    cache[enabledBy] = function()
+      return ui.config[enabledBy] == true
+    end
+    return cache[enabledBy]
+  end
+
+  local function getNumberGetter(key, minVal, maxVal)
+    local cache = numberCache("numberGetters")
+    if cache[key] then return cache[key] end
+    cache[key] = function()
+      local current = tonumber(ui.config[key]) or minVal
       if current < minVal then current = minVal end
       if current > maxVal then current = maxVal end
       return current
     end
-    return ui.runtime.escThresholdGet
+    return cache[key]
   end
 
-  local function getEscThresholdSetter(minVal, maxVal)
-    if ui.runtime.escThresholdSet then return ui.runtime.escThresholdSet end
-    ui.runtime.escThresholdSet = function(val)
-      local nextVal = tonumber(val) or minVal
-      if nextVal < minVal then nextVal = minVal end
-      if nextVal > maxVal then nextVal = maxVal end
-      if ui.config.esc_threshold ~= nextVal then
-        ui.config.esc_threshold = nextVal
+  local function getNumberSetter(key, enabledBy, minVal, maxVal)
+    local cache = numberCache("numberSetters")
+    if cache[key] then return cache[key] end
+    cache[key] = function(value)
+      if type(enabledBy) == "string" and ui.config[enabledBy] ~= true then return end
+      local nextValue = tonumber(value) or minVal
+      if nextValue < minVal then nextValue = minVal end
+      if nextValue > maxVal then nextValue = maxVal end
+      if ui.config[key] ~= nextValue then
+        ui.config[key] = nextValue
+        -- markValueChanged rather than markDirty: a numberEdit is edited in place, and the
+        -- rebuild markDirty asks for would destroy the editor between two clicks.
         ui.runtime.markValueChanged()
       end
     end
-    return ui.runtime.escThresholdSet
-  end
-
-  local function getFuelEnabled()
-    if ui.runtime.fuelEnabled then return ui.runtime.fuelEnabled end
-    ui.runtime.fuelEnabled = function()
-      return ui.config.fuel_alerts == true
-    end
-    return ui.runtime.fuelEnabled
+    return cache[key]
   end
 
   local function getFuelCalloutOptions(i18n)
@@ -326,32 +384,6 @@ function M.new(sectionKey)
       end
     end
     return ui.runtime.fuelCalloutSet
-  end
-
-  local function getFuelRepeatGetter(minVal, maxVal)
-    if ui.runtime.fuelRepeatGet then return ui.runtime.fuelRepeatGet end
-    ui.runtime.fuelRepeatGet = function()
-      local current = tonumber(ui.config.fuel_repeat_below_zero) or minVal
-      if current < minVal then current = minVal end
-      if current > maxVal then current = maxVal end
-      return current
-    end
-    return ui.runtime.fuelRepeatGet
-  end
-
-  local function getFuelRepeatSetter(minVal, maxVal)
-    if ui.runtime.fuelRepeatSet then return ui.runtime.fuelRepeatSet end
-    ui.runtime.fuelRepeatSet = function(value)
-      if ui.config.fuel_alerts ~= true then return end
-      local nextValue = tonumber(value) or minVal
-      if nextValue < minVal then nextValue = minVal end
-      if nextValue > maxVal then nextValue = maxVal end
-      if ui.config.fuel_repeat_below_zero ~= nextValue then
-        ui.config.fuel_repeat_below_zero = nextValue
-        ui.runtime.markValueChanged()
-      end
-    end
-    return ui.runtime.fuelRepeatSet
   end
 
   local function getFuelHapticGetter()
@@ -394,11 +426,18 @@ function M.new(sectionKey)
       end
     end
 
-    if ui.config.esc_threshold < 60 then ui.config.esc_threshold = 60 end
-    if ui.config.esc_threshold > 300 then ui.config.esc_threshold = 300 end
+    -- A stored value outside the schema's range is brought back into it, so that the number
+    -- on screen is one the control could have produced. The bounds are the schema's, which
+    -- is the same pair the control below is built with.
+    for _, field in ipairs(CONFIG_SCHEMA) do
+      if ownsField(field) and field.type == "number" then
+        local value = ui.config[field.key]
+        if field.min and value < field.min then value = field.min end
+        if field.max and value > field.max then value = field.max end
+        ui.config[field.key] = value
+      end
+    end
     if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
-    if ui.config.fuel_repeat_below_zero < 1 then ui.config.fuel_repeat_below_zero = 1 end
-    if ui.config.fuel_repeat_below_zero > 10 then ui.config.fuel_repeat_below_zero = 10 end
 
     -- After the clamps, so that correcting an out-of-range stored value does not read as an
     -- edit the pilot made.
@@ -572,37 +611,22 @@ function M.new(sectionKey)
           getFuelCalloutGetter()(),
           getFuelCalloutSetter()
         )
-      elseif item.kind == "number" and k == "fuel_repeat_below_zero" then
-        local minVal = item.min or 1
-        local maxVal = item.max or 10
-        local labelText = t(i18n, item.labelKey, item.labelFallback)
-        cursorY = cursorY + Controls.appendNumberField(
-          children, x, cursorY, w,
-          labelText,
-          {
-            enabled = getFuelEnabled(),
-            min = minVal,
-            max = maxVal,
-            suffix = item.suffix or "",
-            get = getFuelRepeatGetter(minVal, maxVal),
-            set = getFuelRepeatSetter(minVal, maxVal)
-          }
-        )
       elseif item.kind == "number" then
-        local minVal = item.min or 0
-        local maxVal = item.max or 100
+        local field = SCHEMA_BY_KEY[k]
+        local minVal = (field and field.min) or 0
+        local maxVal = (field and field.max) or 100
         local labelText = t(i18n, item.labelKey, item.labelFallback)
         labelText = modelScopeLabel(i18n, k, labelText)
         cursorY = cursorY + Controls.appendNumberField(
           children, x, cursorY, w,
           labelText,
           {
-            enabled = getEscThresholdEnabled(),
+            enabled = getNumberEnabled(item.enabledBy),
             min = minVal,
             max = maxVal,
             suffix = item.suffix or "",
-            get = getEscThresholdGetter(minVal, maxVal),
-            set = getEscThresholdSetter(minVal, maxVal)
+            get = getNumberGetter(k, minVal, maxVal),
+            set = getNumberSetter(k, item.enabledBy, minVal, maxVal)
           }
         )
       elseif item.kind == "bool" and k == "fuel_haptic_below_zero" then

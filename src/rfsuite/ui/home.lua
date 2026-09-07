@@ -596,13 +596,14 @@ state = {
     lowFuelLastAt = 0,
     lowFuelRepeatCount = 0,
     -- This table is rebuilt every time the tool is started, which is not the same thing as
-    -- the craft having reconnected. The fuel level and the battery capacity are announced
-    -- once per connection, so without these two the pilot hears both again on every open,
-    -- with nothing on the craft having changed. Each flag is consumed once, by the first
-    -- reading that would otherwise have been announced, and a genuine reconnect later in the
-    -- same session speaks as it always did.
+    -- the craft having reconnected. The fuel level, the battery capacity and the pack check
+    -- happen once per connection, so without these flags the pilot hears all three again on
+    -- every open, with nothing on the craft having changed. Each flag is consumed once, by
+    -- the first reading that would otherwise have been announced, and a genuine reconnect
+    -- later in the same session speaks as it always did.
     seedInitialFuel = true,
     seedBatteryCapacity = true,
+    seedPackCheck = true,
     -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
     lastValues = { arming_flags = nil, governor_state = nil, pid_profile = nil, rate_profile = nil, battery_profile = nil },
     pendingValues = { pid_profile = nil, rate_profile = nil, battery_profile = nil },
@@ -3063,6 +3064,11 @@ function M.run(event, touchState)
         -- zero as a measurement on a setup whose battery telemetry keeps this loop
         -- running while no link sensor is present.
         ts.lq = lqReading or ts.lq
+        -- Which sensor answered for `link`, so that a consumer can tell a quality in percent
+        -- from an RSSI in dBm: the search path in lib/sensors.lua ends in 1RSS and 2RSS.
+        -- Sensors.active_paths is filled on the telemetry path only, so this stays nil under
+        -- the simulator and a consumer has to cope with not being told.
+        ts.lqSource = (Sensors.active_paths and Sensors.active_paths.link) or ts.lqSource
         ts.profile = roundInt(Sensors.getValue("pid_profile") or ts.profile, ts.profile or 1)
         ts.rateProfile = roundInt(Sensors.getValue("rate_profile") or ts.rateProfile, ts.rateProfile or 1)
         ts.batteryProfile = roundInt(Sensors.getValue("battery_profile") or ts.batteryProfile, ts.batteryProfile or 1)
@@ -3164,6 +3170,7 @@ function M.run(event, touchState)
         state.telemetryState.fuelTelemetrySeen = nil
         state.telemetryState.rpm = nil
         state.telemetryState.lq = nil
+        state.telemetryState.lqSource = nil
         state.telemetryState.armFlags = nil
         state.telemetryState.armDisableFlags = nil
         state.telemetryState.armed = nil

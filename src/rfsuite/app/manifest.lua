@@ -442,6 +442,7 @@ local manifest = {
         { id = "audio_events_adjustment", title = "@i18n(app.modules.audio_events_adjustment.name)@", menuId = "settings_audio_events_adjustment_page", icon = "@pages/setup/controls/adjustments/icon.png" },
         { id = "audio_events_fuel", title = "@i18n(app.modules.audio_events_fuel.name)@", menuId = "settings_audio_events_fuel_page", icon = "@pages/setup/power/smartfuel/icon.png" },
         { id = "audio_events_battery", title = "@i18n(app.modules.audio_events_battery.name)@", menuId = "settings_audio_events_battery_page", icon = "@pages/setup/power/battery/icon.png" },
+        { id = "audio_events_link", title = "@i18n(app.modules.audio_events_link.name)@", menuId = "settings_audio_events_link_page", icon = "@pages/tools/diagnostics/elrs_link/icon.png" },
         { id = "audio_events_other", title = "@i18n(app.modules.audio_events_other.name)@", menuId = "settings_audio_events_other_page", icon = "@pages/setup/model/icon.png" }
       }
     },
@@ -475,6 +476,10 @@ local manifest = {
     },
     settings_audio_events_battery_page = {
       title = "@i18n(app.modules.audio_events_battery.name)@",
+      pages = {}
+    },
+    settings_audio_events_link_page = {
+      title = "@i18n(app.modules.audio_events_link.name)@",
       pages = {}
     },
     settings_audio_events_other_page = {

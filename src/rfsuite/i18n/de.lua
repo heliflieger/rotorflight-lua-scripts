@@ -174,6 +174,7 @@ return {
       audio_events_adjustment = { name = "Einstellungen" },
       audio_events_fuel = { name = "Kraftstoff" },
       audio_events_battery = { name = "Akku" },
+      audio_events_link = { name = "Link" },
       audio_events_other = { name = "Sonstiges" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -732,6 +733,8 @@ return {
         section_voltage = "Spannung",
         section_profiles = "PID/Raten-Profil",
         section_esc = "ESC-Temperatur",
+        section_mcu = "MCU-Temperatur",
+        section_link = "Linkqualitaet",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
         section_battery = "Akku",
@@ -750,11 +753,17 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Spannung",
+        pack_not_full = "Akku nicht voll",
+        pack_not_full_margin = "Toleranz (mV/Zelle)",
         pid_profile = "PID-Profil",
         rate_profile = "Raten-Profil",
         esc_temperature = "ESC-Temperatur",
         esc_threshold = "Schwellwert (°)",
         esc_threshold_model = "Schwellwert (°) [Modell]",
+        mcu_temperature = "MCU-Temperatur",
+        lq_alert = "Linkqualitaet",
+        lq_warn = "Warnung (%)",
+        lq_critical = "Kritisch (%)",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "Kraftstoff",
         fuel_callout_percent = "Ansage %",
@@ -783,13 +792,13 @@ return {
         help_message = "Ansage des Governor-Status. Der Hauptschalter schaltet die Ansagen ein; darunter waehlst du, welche Zustaende gesprochen werden. Ein Zustand wird erst angesagt, wenn er einen Moment anliegt, damit die Zustaende eines Hochlaufs nicht nacheinander vorgelesen werden."
       },
       settings_audio_events_voltage = {
-        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt. Die Warnung wiederholt sich alle 10 Sekunden, bis sich die Spannung erholt."
+        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt. Die Warnung wiederholt sich alle 10 Sekunden, bis sich die Spannung erholt. Darunter meldet sich die Akkupruefung einmal beim Verbinden des Modells, wenn der Akku nicht voll ist, und sagt die Spannung pro Zelle an. Die Toleranz gibt an, wie weit ein Akku unter der Zellenspannung aus der Akkukonfiguration liegen darf und trotzdem als voll gilt, damit ein einen Tag lang gelagerter Akku sie nicht ausloest. Die Pruefung erfolgt einmal pro Verbindung und nie wieder im Flug."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Ansage, wenn die ESC-Temperatur den Schwellwert erreicht. Der Schwellwert gehoert zum Modell: mit verbundenem Flugregler wird er beim Modell gespeichert, sonst gilt der radioweite Standard."
+        help_message = "Ansage, wenn die ESC-Temperatur den Schwellwert erreicht. Der Schwellwert gehoert zum Modell: mit verbundenem Flugregler wird er beim Modell gespeichert, sonst gilt der radioweite Standard. Darunter hat die MCU-Temperatur des Flugreglers einen eigenen Schalter und einen eigenen Schwellwert. Dieser gilt radioweit, denn derselbe Regler ist in jedem Modell gleich spezifiziert. Beide Warnungen wiederholen sich alle 10 Sekunden, solange die Temperatur auf oder ueber ihrem Schwellwert bleibt."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage eines Werts, der ueber eine Adjustment-Funktion geaendert wurde, so wie der Flugregler ihn meldet."
@@ -799,6 +808,9 @@ return {
       },
       settings_audio_events_battery = {
         help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
+      },
+      settings_audio_events_link = {
+        help_message = "Ansage der Linkqualitaet mit gesprochenem Prozentwert, auf einer Warnstufe und noch einmal auf einer kritischen Stufe. Eine Stufe wird beim Erreichen angesagt und danach alle 10 Sekunden, solange sie anliegt; die Erholung bleibt still. Bei einem Empfaenger, der keine Linkqualitaet meldet, bleibt die Warnung stumm, denn der Wert, der stattdessen ankommt, ist eine Signalstaerke in dBm und kein Prozentwert."
       },
       settings_audio_events_other = {
         help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."

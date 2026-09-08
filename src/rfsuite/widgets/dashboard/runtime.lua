@@ -548,7 +548,7 @@ local function preferencesStamp(modelPath)
   return out
 end
 
-local function reloadPreferencesIfNeeded(self, force)
+local function reloadPreferencesIfNeeded(self, force, isBackground)
   local now = nowSeconds()
 
   -- The stamp and sequences that a completed reload will adopt. Held back on purpose -- see the armed
@@ -568,7 +568,9 @@ local function reloadPreferencesIfNeeded(self, force)
         -- First look. The preferences in hand were loaded from these very files, so this
         -- is a baseline and never a reload.
         self._lastPrefsStamp = stamp
+        logGv("reloadPreferencesIfNeeded: baseline stamp set: '%s'", tostring(stamp))
       elseif stamp ~= self._lastPrefsStamp then
+        logGv("reloadPreferencesIfNeeded: stamp changed ('%s' -> '%s')", tostring(self._lastPrefsStamp), tostring(stamp))
         signalReload = true
       end
     end
@@ -599,11 +601,14 @@ local function reloadPreferencesIfNeeded(self, force)
         local lastSeq = self._lastReloadSeqs[reqPath]
         if lastSeq == nil then
           self._lastReloadSeqs[reqPath] = seq
+          logGv("reloadPreferencesIfNeeded: baseline seq for %s is %d (fstat_ok=%s)", reqPath, seq, tostring(ok))
         elseif seq ~= lastSeq then
           logGv("reloadPreferencesIfNeeded: %s sequence changed (%s -> %s)", reqPath, tostring(lastSeq), tostring(seq))
           signalReload = true
         end
       end
+    else
+      logGv("reloadPreferencesIfNeeded: fstat unavailable")
     end
   end
 
@@ -624,13 +629,76 @@ local function reloadPreferencesIfNeeded(self, force)
   -- Returning here does NOT lose the change: `self._reloadPending` is kept until the reload
   -- actually executes, so the next pass after disarming sees the pending reload and reloads then.
   if not force and (self.state.armed or (self.state.hadInflightFlight == true and not self.state.fblConnected)) then
+    logGv("reloadPreferencesIfNeeded: deferred due to armed/offline (armed=%s, hadInflightFlight=%s, fblConnected=%s)", tostring(self.state.armed), tostring(self.state.hadInflightFlight), tostring(self.state.fblConnected))
     return
   end
 
-  logGv("reloadPreferencesIfNeeded executing (force=%s signal=%s pending=%s)", tostring(force), tostring(signalReload), tostring(self._reloadPending))
-  self._reloadPending = nil
+  if isBackground and not force then
+    -- During background passes (when widget is off-screen), defer heavy file I/O and theme
+    -- compilation until widget returns to screen (refresh pass) to avoid EdgeTX CPU limit faults.
+    logGv("reloadPreferencesIfNeeded: deferred due to background pass (pending=%s)", tostring(self._reloadPending))
+    return
+  end
 
-  -- Adopt both the stamp and sequences together when reloading so their baselines advance synchronously.
+  logGv("reloadPreferencesIfNeeded executing (force=%s signal=%s pending=%s armed=%s)", tostring(force), tostring(signalReload), tostring(self._reloadPending), tostring(self.state and self.state.armed))
+
+  -- Invalidate current theme and memoization state BEFORE heavy disk reads.
+  -- If EdgeTX aborts execution mid-load (e.g. CPU limit fault), all stale
+  -- references are already cleared, so the next tick is forced to retry
+  -- the full reload rather than rendering with leftover stale data.
+  self.theme = nil
+  self.themePath = nil
+  self.built = false
+  self.renderKey = nil
+  self._cachedRenderKey = nil
+  self.lastModelPreferences = nil
+  self.lastModelPrefsSignature = nil
+  -- Clear self.modelPreferences NOW, before the disk reads below. reloadActiveTheme
+  -- reads self.modelPreferences with priority over session.modelPreferences. If a
+  -- CPU-limit fault fires between here and the assignment on line ~690, this nil
+  -- prevents reloadActiveTheme from picking up the previous stale model prefs and
+  -- rendering the wrong theme on the next pass.
+  self.modelPreferences = nil
+  themePathMemo = {}
+
+  local prefs = loadPreferences()
+  if type(prefs) == "table" then
+    self.preferences = prefs
+    publishPreferencesToGlobal(prefs)
+    
+    -- Expose i18n on the runtime state so theme renderers can access it
+    if self.i18n then
+      if type(self.state) ~= "table" then self.state = {} end
+      self.state.i18n = self.i18n
+    end
+
+    -- Reload model-specific preferences from disk if MCU ID is available
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    if session and session.mcu_id then
+      local MP = ModelPreferences or requireModule("lib/model_preferences.lua")
+      if MP and type(MP.loadByMcuId) == "function" then
+        local mPrefs, mPath = MP.loadByMcuId(session.mcu_id, true)
+        if mPrefs then
+          session.modelPreferences = mPrefs
+          session.modelPreferencesFile = mPath
+          self.modelPreferences = mPrefs
+          if MspRuntime and type(MspRuntime.setModelPreferences) == "function" then
+            MspRuntime.setModelPreferences(mPrefs, mPath)
+          end
+          local d = mPrefs.dashboard or {}
+          logGv("Loaded model prefs from disk: %s (override=%s preflight=%s inflight=%s postflight=%s)", tostring(mPath), tostring(d.model_override), tostring(d.model_theme_preflight), tostring(d.model_theme_inflight), tostring(d.model_theme_postflight))
+        else
+          logGv("MP.loadByMcuId(%s, true) returned nil", tostring(session.mcu_id))
+        end
+      end
+    else
+      logGv("No session.mcu_id available during reloadPreferencesIfNeeded")
+    end
+
+    self._lastUIRefresh = 0
+  end
+
+  -- Adopt both the stamp and sequences together when reloading succeeds so their baselines advance synchronously.
   if currentStamp then
     self._lastPrefsStamp = currentStamp
   else
@@ -654,52 +722,9 @@ local function reloadPreferencesIfNeeded(self, force)
     end
   end
 
-  local prefs = loadPreferences()
-  if type(prefs) == "table" then
-    self.preferences = prefs
-    publishPreferencesToGlobal(prefs)
-    
-    -- Expose i18n on the runtime state so theme renderers can access it
-    if self.i18n then
-      if type(self.state) ~= "table" then self.state = {} end
-      self.state.i18n = self.i18n
-    end
-
-    -- Reload model-specific preferences from disk if MCU ID is available
-    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
-    if session and session.mcu_id then
-      local MP = ModelPreferences or requireModule("lib/model_preferences.lua")
-      if MP and type(MP.loadByMcuId) == "function" then
-        local mPrefs, mPath = MP.loadByMcuId(session.mcu_id)
-        if mPrefs then
-          session.modelPreferences = mPrefs
-          session.modelPreferencesFile = mPath
-          self.modelPreferences = mPrefs
-          logGv("Loaded model prefs from disk: %s", tostring(mPath))
-        end
-      end
-    else
-      logGv("No session.mcu_id available during reloadPreferencesIfNeeded")
-    end
-
-    -- Invalidate current theme and force immediate reload
-    self.theme = nil
-    self.themePath = nil
-    self.built = false
-    self.renderKey = nil
-    self._cachedRenderKey = nil
-    -- Invalidate the theme-path memo. Table identity comparison means discarded
-    -- tables will miss the cache automatically, but resetting the memo on reload
-    -- releases references to dead preference tables and keeps the table bounded.
-    themePathMemo = {}
-    -- NOTE: do NOT clear lastModelPreferences here. Clearing it disarms the
-    -- content-signature guard in refresh() so that the next identical table
-    -- instance (allocated by a concurrent publisher) would trigger a redundant
-    -- full scene rebuild and blow the EdgeTX instruction budget.
-    self._lastUIRefresh = 0
-  end
-
+  self._reloadPending = nil
   self.preferencesLastLoadedAt = now
+  return true
 end
 
 local function updateConnectionState(self)
@@ -1308,10 +1333,14 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     reason = "default_fallback"
   end
 
-  logGv("resolveTheme: mode=%s, modelOverride=%s, modelKey=%s, modelValue=%s, globalKey=%s, globalValue=%s => chosen=%s (%s)",
-    tostring(flightMode), tostring(modelOverride), tostring(modelKey),
-    tostring(modelKey and modelDashboard[modelKey]),
-    tostring(key), tostring(key and dashboard and dashboard[key]), tostring(chosen), tostring(reason))
+  logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s, modelKey=%s, modelValue=%s, globalKey=%s, globalValue=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride),
+    tostring(modelDashboard and modelDashboard.model_theme_preflight),
+    tostring(dashboard and dashboard.theme_preflight),
+    tostring(modelKey),
+    tostring(modelKey and modelDashboard and modelDashboard[modelKey]),
+    tostring(key), tostring(key and dashboard and dashboard[key]),
+    tostring(chosen), tostring(reason))
 
   themePathMemo.dashboard = dashboard
   themePathMemo.modelPrefs = modelPrefs
@@ -1872,7 +1901,7 @@ function Runtime.new(zone, options)
     end
   end
 
-  local function performBackgroundWork(self)
+  local function performBackgroundWork(self, isBackground)
     local now = nowSeconds()
     if self._lastWorkTick == now then return self.connectionReady end
     self._lastWorkTick = now
@@ -1894,7 +1923,7 @@ function Runtime.new(zone, options)
     end
     tickMspRuntime(self)
     
-    reloadPreferencesIfNeeded(self, false)
+    local reloaded = (reloadPreferencesIfNeeded(self, false, isBackground) == true)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
     local wasFblConnected = self.lastFblConnected == true
@@ -2014,6 +2043,17 @@ function Runtime.new(zone, options)
     end
     self.lastModelPreferences = modelPrefs
 
+    if reloaded then
+      -- If preferences were reloaded from disk in this pass, defer theme module loading
+      -- to the next pass to prevent EdgeTX CPU limit faults. reloadPreferencesIfNeeded
+      -- already invalidated self.theme = nil and self.built = false. The next pass
+      -- will run reloadActiveTheme on a dedicated fresh instruction budget.
+      if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+        _G.rfsuite.session.event_context = nil
+      end
+      return ready
+    end
+
     if nextMode ~= self.flightMode then
       self.flightMode = nextMode
       reloadActiveTheme(self)
@@ -2107,7 +2147,7 @@ function Runtime.new(zone, options)
     end
 
     -- STATE pass: the background half, then invalidation checks that only enqueue.
-    local ready = performBackgroundWork(self)
+    local ready = performBackgroundWork(self, false)
 
     if not ready and self.flightMode ~= "postflight" then
       local statusLine = self.statusLine or "Please wait..."
@@ -2163,7 +2203,7 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
-    performBackgroundWork(self)
+    performBackgroundWork(self, true)
     return 0
   end
 

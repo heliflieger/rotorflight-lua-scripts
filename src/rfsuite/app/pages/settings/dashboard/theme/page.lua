@@ -217,9 +217,15 @@ local function saveToPreferences(prefs)
       local mDashboard = session.modelPreferences.dashboard
 
       mDashboard.model_override = ui.config.model_override == true
-      mDashboard.model_theme_preflight = ui.config.model_theme_preflight
-      mDashboard.model_theme_inflight = ui.config.model_theme_inflight
-      mDashboard.model_theme_postflight = ui.config.model_theme_postflight
+      if ui.config.model_override == true then
+        mDashboard.model_theme_preflight = ui.config.model_theme_preflight
+        mDashboard.model_theme_inflight = ui.config.model_theme_inflight
+        mDashboard.model_theme_postflight = ui.config.model_theme_postflight
+      else
+        mDashboard.model_theme_preflight = "nil"
+        mDashboard.model_theme_inflight = "nil"
+        mDashboard.model_theme_postflight = "nil"
+      end
 
       -- Save model preferences using ModelPreferences module
       modelOk, modelErr = false, "model_preferences"

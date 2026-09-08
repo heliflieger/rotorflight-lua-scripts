@@ -18,6 +18,13 @@ local function bumpReloadCounter(userRoot)
   M.bumpReloadCounter(userRoot)
 end
 
+local function logD(fmt, ...)
+  local L = _G.rfsuite and _G.rfsuite.Log
+  if L and type(L.emitf) == "function" then
+    L.emitf("rfsuite.reload", "debug", fmt, ...)
+  end
+end
+
 -- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
 -- below keeps going until the file ends.
 local READ_CHUNK = 2048
@@ -320,17 +327,22 @@ end
 
 function M.bumpReloadCounter(userRoot)
   local targetPath = M.reloadRequestPath(userRoot)
+  local prevN = 0
   local n = 1
   if type(fstat) == "function" then
     local ok, info = pcall(fstat, targetPath)
     if ok and type(info) == "table" then
-      n = ((info.size or 0) % 32) + 1
+      prevN = (info.size or 0)
+      n = (prevN % 32) + 1
     end
   end
   local f = io.open(targetPath, "w")
   if f then
     io.write(f, string.rep("x", n))
     io.close(f)
+    logD("bumpReloadCounter: wrote %d bytes (was %d) to %s", n, prevN, targetPath)
+  else
+    logD("bumpReloadCounter: FAILED to open %s for write", targetPath)
   end
 end
 
@@ -347,14 +359,7 @@ local function ensureFileExists(path)
   return true
 end
 
-local cachedMcuId = nil
-local cachedPrefs = nil
-local cachedPath = nil
-
 function M.clearCache()
-  cachedMcuId = nil
-  cachedPrefs = nil
-  cachedPath = nil
   memoizedRoots = {}
 end
 
@@ -370,10 +375,6 @@ end
 function M.loadByMcuId(mcuId, force)
   local safeId = normalizeMcuId(mcuId)
   if not safeId then return nil, nil end
-
-  if not force and cachedMcuId == safeId and cachedPrefs and cachedPath then
-    return deepCopyTable(cachedPrefs), cachedPath
-  end
 
   local defaults = defaultModelPreferences()
   local roots = orderedRoots(safeId)
@@ -398,19 +399,15 @@ function M.loadByMcuId(mcuId, force)
         end
       end
 
-      cachedMcuId = safeId
-      cachedPrefs = deepCopyTable(merged)
-      cachedPath = path
-
+      local d = merged.dashboard or {}
+      logD("loadByMcuId: loaded from disk %s (force=%s, override=%s, preflight=%s)", path, tostring(force), tostring(d.model_override), tostring(d.model_theme_preflight))
       return merged, path
     end
   end
 
   -- Could not create/load file on any root; still return defaults in-memory.
   local fallback = deepCopyTable(defaults)
-  cachedMcuId = safeId
-  cachedPrefs = deepCopyTable(fallback)
-  cachedPath = nil
+  logD("loadByMcuId: fallback defaults for mcuId=%s", safeId)
   return fallback, nil
 end
 
@@ -432,18 +429,20 @@ function M.saveByMcuId(mcuId, prefs)
     if okTouch then
       local okSave, saveErr = saveIni(path, data)
       if okSave then
-        cachedMcuId = safeId
-        cachedPrefs = deepCopyTable(data)
-        cachedPath = path
+        memoizedRoots = {}
         -- Signal the dashboard widget that model preferences have changed via
         -- rotating sequence length in reload.req. Multi-reader safe, armed-safe,
         -- and independent of RTC timestamp or INI file size equality.
         bumpReloadCounter(userRoot)
+        local d = data.dashboard or {}
+        logD("saveByMcuId: saved to %s (override=%s, preflight=%s)", path, tostring(d.model_override), tostring(d.model_theme_preflight))
         return true
       end
       lastErr = saveErr or "io"
+      logD("saveByMcuId: saveIni failed for %s: %s", path, tostring(saveErr))
     else
       lastErr = touchErr or "io"
+      logD("saveByMcuId: ensureFileExists failed for %s: %s", path, tostring(touchErr))
     end
   end
 

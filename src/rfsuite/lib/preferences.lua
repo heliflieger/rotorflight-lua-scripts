@@ -9,6 +9,13 @@ local RELOAD_REQ_PATH  = "/SCRIPTS/TOOLS/rfsuite.user/reload.req"
 
 local cachedModelPreferences = nil
 
+local function logD(fmt, ...)
+  local L = _G.rfsuite and _G.rfsuite.Log
+  if L and type(L.emitf) == "function" then
+    L.emitf("rfsuite.reload", "debug", fmt, ...)
+  end
+end
+
 local function getModelPreferences()
   if cachedModelPreferences then
     return cachedModelPreferences
@@ -37,17 +44,22 @@ local function bumpReloadCounter(userRoot)
   end
 
   local targetPath = userRoot and (userRoot .. "/reload.req") or RELOAD_REQ_PATH
+  local prevN = 0
   local n = 1
   if type(fstat) == "function" then
     local ok, info = pcall(fstat, targetPath)
     if ok and type(info) == "table" then
-      n = ((info.size or 0) % 32) + 1
+      prevN = (info.size or 0)
+      n = (prevN % 32) + 1
     end
   end
   local f = io.open(targetPath, "w")
   if f then
     io.write(f, string.rep("x", n))
     io.close(f)
+    logD("Preferences.bumpReloadCounter: wrote %d bytes (was %d) to %s", n, prevN, targetPath)
+  else
+    logD("Preferences.bumpReloadCounter: FAILED to open %s for write", targetPath)
   end
 end
 
@@ -258,7 +270,10 @@ function M.save(prefs)
   ensureUserDir(path)
 
   local f, err = io.open(path, "w")
-  if not f then return false, err end
+  if not f then
+    logD("Preferences.save: FAILED to open %s for write: %s", path, tostring(err))
+    return false, err
+  end
 
   for section, values in pairs(prefs or {}) do
     if type(values) == "table" then
@@ -276,6 +291,7 @@ function M.save(prefs)
   -- of RTC timestamp or INI file size equality.
   local userRoot = string.match(path, "^(.*)/[^/]+$")
   bumpReloadCounter(userRoot)
+  logD("Preferences.save: saved to %s", path)
 
   return true
 end

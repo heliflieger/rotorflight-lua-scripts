@@ -35,6 +35,10 @@
   - Standardized all 102 MSP API modules (`Api.parse`) to return a clean, flat table (`return { ... }`) rather than mixed wrapped tables (`{ parsed = ... }`), eliminating duplicate unnesting logic across servo, esc, and setup pages and improving API tester introspection.
 
 ### Bug Fixes & Improvements
+- **Dashboard Model Preferences Cache Invalidation & Reload Decoupling (`widgets/dashboard`, `lib/model_preferences.lua`, `tasks/msp/runtime.lua`)** (fixes #186):
+  - Fixed an issue where changing theme selection or model preference overrides in the suite did not update the active dashboard widget until a transmitter power cycle due to stale in-memory preferences and RAM cache lookups.
+  - Decoupled disk I/O from theme module loading during preference reloads (`reloadPreferencesIfNeeded`) so reading INI files and building the theme occur on separate passes, eliminating EdgeTX CPU limit instruction budget faults.
+  - Hardened reload lifecycle against mid-load faults: pre-cleared theme and memo state before disk reads, deferred baseline stamp/sequence adoption and pending flag clearance until after successful I/O, and protected active session preferences against stale MSP runtime republishes.
 - **Dashboard Postflight Stats: Missing Handlers and Live-Value Fallthrough (`widgets/dashboard`) — fixes [#133](https://github.com/rotorflight/rotorflight-lua-edgetx-suite/issues/133)**:
   - Added per-flight tracking for `currentFlightMaxVoltage`/`lastFlightMaxVoltage`, `currentFlightMaxLq`/`lastFlightMaxLq`, `currentFlightMinBecVoltage`/`lastFlightMinBecVoltage`, and `lastFlightEndingVoltage` in `runtime.lua` (`updateDerivedFlightState`).
   - Added stat handlers in `objects/text/stats.lua` for `max`+`voltage` (MAX VOLTAGE tile in `rfstatus` theme), `max`+`link` (LINK MAX in `@rt-rc-n`), `min`+`link` (LINK MIN in `@srb-rc`), and `last`+`voltage` (ENDING VOLTAGE in `@srb-rc`).

@@ -1,6 +1,11 @@
 # 0.1.7
 
 ### Bug Fixes & Improvements
+- **Initial fuel announcement: gated until valid telemetry arrives and sensor promotion added (`lib/audio.lua`, `lib/sensors.lua`, `widgets/dashboard/runtime.lua`, `ui/home.lua`) (fixes #187)**:
+  - Gated `initial_fuel` in `lib/audio.lua` with `self.state.fuelTelemetrySeen == true`. Previously, this check was missing while continuous `fuel_alerts` had it, causing startup audio to announce the pre-initialized seed value of `0` ("Battery 0%") before telemetry packets arrived.
+  - Added a 5.0 s stabilization grace period for an initial fuel reading of `0%`. If non-zero telemetry (e.g. SmartFuel `SmFt`) arrives within the window, the true percentage is spoken immediately; if the pack is genuinely empty, `0%` is announced after the timeout expires.
+  - Added periodic (3.0 s) promotion of the primary telemetry sensor in `lib/sensors.lua`: if an early fallback sensor (such as RC-link `Bat%`) is cached before the flight controller or SmartFuel initializes, the primary sensor (`SmFt`) is promoted as soon as it begins emitting.
+  - Added `Sensors.reset()` to flush cached sensor paths on FBL disconnect/reconnect edges, and cleared `fuelTelemetrySeen` and `state.fuel` on disconnect to prevent announcing the previous pack's state on reconnect.
 - **Preference watcher: a file that cannot be read is no longer reported as a file that changed (`widgets/dashboard/runtime.lua`)**:
   - `preferencesStamp` dropped the per-model half of its stamp, or returned an empty string for the global half, whenever `fstat` raised or answered something unreadable. The shorter string then differed from the kept one, so a failed read arrived at the watcher as a change and cost a full reload -- preferences re-read, theme dropped, scene rebuilt -- and a second one when the file read again.
   - A failure to measure is now `nil`, which both callers already treat as "no comparison this pass". A session with no per-model file is unchanged and still stamps the global half alone.

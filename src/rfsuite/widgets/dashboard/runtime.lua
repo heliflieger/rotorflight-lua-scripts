@@ -2084,6 +2084,9 @@ function Runtime.new(zone, options)
       self.renderKey = nil
       self._cachedRenderKey = nil
       self._job = nil
+      if Sensors and type(Sensors.reset) == "function" then
+        Sensors.reset()
+      end
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
@@ -2100,6 +2103,11 @@ function Runtime.new(zone, options)
       -- anything reads them.
       self.state.batteryTelemetrySeen = false
       self.state.rfTelemetrySeen = false
+      self.state.fuelTelemetrySeen = false
+      self.state.fuel = 0
+      if Sensors and type(Sensors.reset) == "function" then
+        Sensors.reset()
+      end
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end

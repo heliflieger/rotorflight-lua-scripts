@@ -493,6 +493,24 @@ function Sensors.getValue(source)
 
   local activePath = Sensors.active_paths and Sensors.active_paths[source]
   if activePath then
+    local paths = Sensors.search_paths[source]
+    local primaryPath = paths and paths[1]
+    if primaryPath and activePath ~= primaryPath then
+      local now = nowSeconds()
+      Sensors.probe_times = Sensors.probe_times or {}
+      local lastProbe = Sensors.probe_times[source] or 0
+      if now - lastProbe >= 3.0 then
+        Sensors.probe_times[source] = now
+        local primaryVal = readTelemetryValue(primaryPath)
+        if type(primaryVal) == "number" then
+          Sensors.active_paths = Sensors.active_paths or {}
+          Sensors.active_paths[source] = primaryPath
+          if debugWanted() then debugLog("telemetry-promote:" .. source, "promoted " .. primaryPath .. " = " .. tostring(primaryVal)) end
+          return primaryVal
+        end
+      end
+    end
+
     local val = readTelemetryValue(activePath)
     if type(val) == "number" then
       if debugWanted() then debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val)) end
@@ -539,6 +557,28 @@ function Sensors.getValue(source)
 
   Sensors.search_misses[source] = now
   return nil
+end
+
+-- Flush cached sensor paths and miss / probe timers (e.g. on model disconnect/reconnect).
+function Sensors.reset()
+  if Sensors.active_paths then
+    for k in pairs(Sensors.active_paths) do
+      Sensors.active_paths[k] = nil
+    end
+  end
+  if Sensors.search_misses then
+    for k in pairs(Sensors.search_misses) do
+      Sensors.search_misses[k] = nil
+    end
+  end
+  if Sensors.probe_times then
+    for k in pairs(Sensors.probe_times) do
+      Sensors.probe_times[k] = nil
+    end
+  end
+  for k in pairs(valueMisses) do
+    valueMisses[k] = nil
+  end
 end
 
 -- Get all 4-char sensor names (for tool enumeration)

@@ -1,5 +1,10 @@
 # 0.1.7
 
+### Bug Fixes & Improvements
+- **Preference watcher: a file that cannot be read is no longer reported as a file that changed (`widgets/dashboard/runtime.lua`)**:
+  - `preferencesStamp` dropped the per-model half of its stamp, or returned an empty string for the global half, whenever `fstat` raised or answered something unreadable. The shorter string then differed from the kept one, so a failed read arrived at the watcher as a change and cost a full reload -- preferences re-read, theme dropped, scene rebuilt -- and a second one when the file read again.
+  - A failure to measure is now `nil`, which both callers already treat as "no comparison this pass". A session with no per-model file is unchanged and still stamps the global half alone.
+
 ### Performance, Memory & Build System
 - **Release Version (`lib/version.lua`)**:
   - Bumped the Rotorflight Lua EdgeTX Suite version to `0.1.7`.

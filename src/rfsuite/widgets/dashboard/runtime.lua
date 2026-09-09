@@ -531,21 +531,37 @@ local function stampOf(info)
     tostring(t.hour), tostring(t.min), tostring(t.sec))
 end
 
+--- What the preference files look like right now, or nil where that could not be established.
+--
+-- The difference between those two is the point. A file that could not be READ is not a file
+-- that CHANGED, and the caller compares this string against the one it kept -- so a failed read
+-- that returns a shorter string turns "I could not look" into "the per-model file is gone". The
+-- reload that answers it re-reads the preferences, drops the theme and rebuilds the scene; and
+-- when the file reads again the string grows back, which is reported as a second change.
+--
+-- Four conditions used to be swallowed that way: an `fstat` that raises and one that answers
+-- something `stampOf` cannot read, for each of the two files. The global pair left the stamp an
+-- empty string, the per-model pair dropped its half. Each of the four is a failure to measure,
+-- and a failure to measure is now nil -- which the caller already treats as "no comparison this
+-- pass". That costs nothing: the next pass looks again a second later.
+--
+-- A nil `modelPath` is deliberately NOT one of them. It says the session has no per-model file,
+-- which is a fact about the model rather than a failed read, and the stamp is then the global
+-- half alone.
 local function preferencesStamp(modelPath)
   if type(fstat) ~= "function" then return nil end
-  local out = ""
+
   local okg, g = pcall(fstat, preferencesFile())
-  if okg then
-    out = stampOf(g) or ""
-  end
-  if modelPath then
-    local okm, m = pcall(fstat, modelPath)
-    if okm then
-      local ms = stampOf(m)
-      if ms then out = out .. "|" .. ms end
-    end
-  end
-  return out
+  local globalStamp = okg and stampOf(g) or nil
+  if not globalStamp then return nil end
+
+  if not modelPath then return globalStamp end
+
+  local okm, m = pcall(fstat, modelPath)
+  local modelStamp = okm and stampOf(m) or nil
+  if not modelStamp then return nil end
+
+  return globalStamp .. "|" .. modelStamp
 end
 
 local function reloadPreferencesIfNeeded(self, force, isBackground)

@@ -23,7 +23,9 @@ handling and the i18n rules — are in [GEMINI.md](GEMINI.md).
 | `src/rfsuite/i18n/` | Locale bundles, one Lua file per language |
 | `src/widgets/rfsuite/` | The dashboard widget, deployed as `WIDGETS/rfsuite/` |
 | `src/widgets/rfsuitesvc/` | The background service widget, deployed as `WIDGETS/rfsuitesvc/` |
+| `docs/` | The user-facing reference, one file per page, and the contributor guides; see below |
 | `bin/package/` | The installation ZIP builder |
+| `bin/accounting/` | The instruction-budget accounting that gates every pull request; its own notes are in `bin/accounting/README.md` |
 | `bin/sensors/` | The simulator sensor tool |
 | `simulator/` | The SD card root the EdgeTX simulator is pointed at; see below |
 | `.vscode/` | Deploy and simulator tasks, and the i18n build scripts |
@@ -163,7 +165,7 @@ whitespace-only diff buries the change a reviewer is looking for.
 
 | Workflow | Trigger | What it produces |
 | --- | --- | --- |
-| `pr.yml` | pull request | The per-locale installation archives, as a build check |
+| `pr.yml` | pull request | The per-locale installation archives as a build check, plus the instruction-budget gate (`bin/accounting/measure.lua --check`) and the i18n precompiler test |
 | `push.yml` | push | The per-locale installation archives |
 | `snapshot.yml` | tag `snapshot/*` | A snapshot release with the per-locale archives |
 | `release.yml` | tag `release/*` | A GitHub release, with notes extracted from `Releases.md` |
@@ -172,6 +174,21 @@ whitespace-only diff buries the change a reviewer is looking for.
 A release tag of the form `release/<x>.<y>.<z>-<suffix>` is published as a Release Candidate;
 without the suffix it is published as a Release. The version baked into the package itself
 comes from `src/rfsuite/lib/version.lua`.
+
+
+## Documentation
+
+`docs/` holds the user-facing reference: one file per configuration page under `docs/pages/`,
+mirroring the layout of `src/rfsuite/app/pages/`, plus the dashboard, audio, reference,
+troubleshooting and developer sections. It is plain Markdown, versioned with the code, and it
+is not part of the installation archive: the packager stages `src/` only, so nothing in
+`docs/` reaches a radio.
+
+Every change a pilot can observe is documented in the same pull request that makes it. The
+rule is in [GEMINI.md](GEMINI.md) under *Documentation Maintenance* and in
+`.agents/rules/documentation.md`, in the same shape as the rule for `Releases.md`. The page
+template is `docs/_template.md`, and `docs/pages/README.md` lists every page with whether its
+file is written yet.
 
 
 ## Sensor tool

@@ -26,6 +26,10 @@ profiles, adjustments and fuel.
 Tutorials, documentation, and flight videos can be found on the
 [Rotorflight website](https://www.rotorflight.org/).
 
+The page-by-page reference for the tool itself, what each configuration page does, its
+settings, and when a page is hidden or read-only, is in [docs/](docs/README.md). Every page
+also carries a short explanation in the tool, behind the `?` button in its header.
+
 
 ## Requirements
 

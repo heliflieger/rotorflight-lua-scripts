@@ -98,6 +98,13 @@ off the console while it still reaches the log ring, the card sink and serial; o
 - Record changes under the active / upcoming release header (e.g. `# 0.1.x`) categorized by `Features & Enhancements`, `Bug Fixes & Improvements`, and `Performance & Build System`.
 - Always commit the updated `Releases.md` as part of the PR.
 
+## Documentation Maintenance (`docs/`)
+- **Mandatory PR Requirement**: With every new page, new or removed setting, changed behaviour a pilot can observe, new widget or theme option, new audio announcement, or removed feature, the documentation under `docs/` must be kept up to date.
+- Update the file of the page that changed (`docs/pages/<page path>.md`, mirroring `src/rfsuite/app/pages/`), and the index `docs/pages/README.md` whenever a page is added or removed. A surface that is not a page has its file under `docs/dashboard/`, `docs/audio/` or `docs/reference/`.
+- Keep `help.lua` and the page file in agreement: the in-app help is the short explanation behind the `?` button, the page file is the same explanation with the settings enumerated. A change that makes the two disagree updates both in the same PR.
+- A PR that changes behaviour without a documentation change states in its body why none was needed.
+- Always commit the updated documentation as part of the PR.
+
 ## CLI & PowerShell Execution Guidelines
 
 ### PowerShell Escape Sequence & Backtick Protection

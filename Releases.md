@@ -6,6 +6,9 @@
 # 0.1.6
 
 ### Features & Enhancements
+- **Documentation Structure & Maintenance Rule (`docs/`)**:
+  - Added a `docs/` folder as the page-by-page reference for the tool, mirroring the menu layout: a page template, an index of every reachable page with its menu path and visibility conditions, section indexes for the dashboard, audio, reference, troubleshooting and developer guides, and two pages written as examples (`setup/model`, `setup/power/smartfuel`). The folder is not part of the installation archive.
+  - Added the documentation maintenance rule (`GEMINI.md`, `.agents/rules/documentation.md`): every change a pilot can observe updates its documentation in the same PR, in the same shape as the `Releases.md` rule.
 - **Dynamic ESC Model Identification & Interface Unification (`setup/esc_motors/esc_tools`)**:
   - Added dynamic ESC model name detection and header display queried directly from hardware via telemetry / MSP.
   - Unified device information and capability reporting across all supported ESC manufacturers (AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE, ZTW).

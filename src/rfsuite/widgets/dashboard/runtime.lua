@@ -564,6 +564,49 @@ local function preferencesStamp(modelPath)
   return globalStamp .. "|" .. modelStamp
 end
 
+--- Which of the two files a stamp difference is about.
+--
+-- The stamp is the global half, then `|`, then the per-model half where there is one. The two
+-- are independent files with independent writers, so a difference in one says nothing about the
+-- other -- and the reload below is the only place that ever needed to know which.
+--
+-- Returns nil where the question cannot be answered, and then both files are read -- which is
+-- what this function did unconditionally before. Three cases answer nil:
+--
+--   * no stamp on one side, or a shape change (one side carrying a per-model half, the other
+--     not). There is nothing to compare half against half;
+--   * both halves differ, which needs no attribution;
+--   * **the changed half's TIMESTAMP did not move.** That is the case this test exists for. A
+--     half is `<size>:<time>`, and a file can change without its stamp moving if the clock is
+--     not running and the new content happens to be the same length -- which is the very reason
+--     the sequence file beside this stamp exists. So an unchanged half is only evidence that its
+--     file is unchanged while the clock is demonstrably running, and the changed half's own
+--     timestamp is what demonstrates it. Where only a SIZE moved, the clock has proved nothing
+--     and both files are read.
+local function stampTime(half)
+  return string.match(half or "", "^[^:]*:(.*)$")
+end
+
+local function changedHalves(oldStamp, newStamp)
+  if type(oldStamp) ~= "string" or type(newStamp) ~= "string" then return nil end
+
+  local oldGlobal, oldModel = string.match(oldStamp, "^([^|]*)|?(.*)$")
+  local newGlobal, newModel = string.match(newStamp, "^([^|]*)|?(.*)$")
+  if oldGlobal == nil or newGlobal == nil then return nil end
+  if (oldModel == "") ~= (newModel == "") then return nil end
+
+  local globalMoved = oldGlobal ~= newGlobal
+  local modelMoved = oldModel ~= newModel
+  if globalMoved == modelMoved then return nil end
+
+  local movedOld, movedNew = oldGlobal, newGlobal
+  if modelMoved then movedOld, movedNew = oldModel, newModel end
+  local a, b = stampTime(movedOld), stampTime(movedNew)
+  if a == nil or b == nil or a == b then return nil end
+
+  return { global = globalMoved, model = modelMoved }
+end
+
 local function reloadPreferencesIfNeeded(self, force, isBackground)
   local now = nowSeconds()
 
@@ -572,6 +615,10 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
   local currentStamp = nil
   local currentSeqs = nil
   local signalReload = false
+  -- Which halves the stamp says have moved, or nil where that is not answerable. Any signal
+  -- that is not a stamp difference -- the sequence file, a forced caller -- leaves it nil and
+  -- both files are read, because those signals do not name a file.
+  local halves = nil
   if not force and (now - (self._lastPrefsStatAt or 0)) >= PREFS_STAT_INTERVAL then
     self._lastPrefsStatAt = now
     -- The per-model file's path lives on the session rather than on `self` -- the same
@@ -586,7 +633,10 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
         self._lastPrefsStamp = stamp
         logGv("reloadPreferencesIfNeeded: baseline stamp set: '%s'", tostring(stamp))
       elseif stamp ~= self._lastPrefsStamp then
-        logGv("reloadPreferencesIfNeeded: stamp changed ('%s' -> '%s')", tostring(self._lastPrefsStamp), tostring(stamp))
+        halves = changedHalves(self._lastPrefsStamp, stamp)
+        logGv("reloadPreferencesIfNeeded: stamp changed ('%s' -> '%s') [global=%s model=%s]",
+          tostring(self._lastPrefsStamp), tostring(stamp),
+          halves and tostring(halves.global) or "?", halves and tostring(halves.model) or "?")
         signalReload = true
       end
     end
@@ -674,27 +724,50 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
   -- CPU-limit fault fires between here and the assignment on line ~690, this nil
   -- prevents reloadActiveTheme from picking up the previous stale model prefs and
   -- rendering the wrong theme on the next pass.
-  self.modelPreferences = nil
   themePathMemo = {}
 
-  local prefs = loadPreferences()
+  -- Read only the file the stamp says has moved. The two are separate files with separate
+  -- writers, and a save made from the settings screen touches the per-model one alone -- so
+  -- re-reading the global file with it is a parse of bytes that have not changed, and that parse
+  -- is the expensive half by a wide margin. Where the signal does not name a file -- a forced
+  -- caller, the sequence file, a shape change in the stamp -- `halves` is nil and both are read,
+  -- which is what this function always did.
+  local doGlobal = (halves == nil) or halves.global
+  local doModel = (halves == nil) or halves.model
+  if not (doGlobal and doModel) then
+    logGv("reloadPreferencesIfNeeded: reading global=%s model=%s", tostring(doGlobal), tostring(doModel))
+  end
+
+  -- Cleared only where it is about to be re-read. reloadActiveTheme reads self.modelPreferences
+  -- with priority over session.modelPreferences, so clearing it on a pass that is not going to
+  -- reload it would drop a good value for no reason.
+  if doModel then self.modelPreferences = nil end
+
+  local loaded = false
+
+  local prefs = doGlobal and loadPreferences() or nil
   if type(prefs) == "table" then
+    loaded = true
     self.preferences = prefs
     publishPreferencesToGlobal(prefs)
-    
+
     -- Expose i18n on the runtime state so theme renderers can access it
     if self.i18n then
       if type(self.state) ~= "table" then self.state = {} end
       self.state.i18n = self.i18n
     end
+  end
 
-    -- Reload model-specific preferences from disk if MCU ID is available
+  -- The per-model half, no longer nested inside the global one: it never read `prefs`, and with
+  -- the two halves now independent a global read that was skipped must not take this with it.
+  if doModel then
     local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
     if session and session.mcu_id then
       local MP = ModelPreferences or requireModule("lib/model_preferences.lua")
       if MP and type(MP.loadByMcuId) == "function" then
         local mPrefs, mPath = MP.loadByMcuId(session.mcu_id, true)
         if mPrefs then
+          loaded = true
           session.modelPreferences = mPrefs
           session.modelPreferencesFile = mPath
           self.modelPreferences = mPrefs
@@ -710,7 +783,9 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
     else
       logGv("No session.mcu_id available during reloadPreferencesIfNeeded")
     end
+  end
 
+  if loaded then
     self._lastUIRefresh = 0
   end
 

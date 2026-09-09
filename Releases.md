@@ -6,6 +6,9 @@
   - A failure to measure is now `nil`, which both callers already treat as "no comparison this pass". A session with no per-model file is unchanged and still stamps the global half alone.
 
 ### Performance, Memory & Build System
+- **Dashboard preference reload reads only the file that changed (`widgets/dashboard/runtime.lua`)**:
+  - The watcher compares a stamp built from the global preferences file and the per-model one, and knows which of the two has moved -- but the reload then re-read both. A save made from a settings screen touches the per-model file alone, so the global file was parsed again on every such save even though its bytes had not changed, and that parse is the expensive half by a wide margin.
+  - The reload now reads only the half the stamp says has moved. Where the signal does not name a file -- a forced reload, the rotating sequence file, a stamp that changed shape, or a changed half whose timestamp did not move (which is the case the sequence file exists for, and where an unchanged half proves nothing) -- both are read exactly as before.
 - **Release Version (`lib/version.lua`)**:
   - Bumped the Rotorflight Lua EdgeTX Suite version to `0.1.7`.
 # 0.1.6
